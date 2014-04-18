@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 0.7 - Copyright (c) 2013-2014 by Pike R. Alpha
+# Version 0.8 - Copyright (c) 2013-2014 by Pike R. Alpha
 #
 # Updates:
 #			- Show Mac model info (Pike R. Alpha, December 2013)
@@ -14,6 +14,7 @@
 #			- Cleanups/comments added (Pike R. Alpha, April 2014)
 #			- Implement gCallOpen like ssdtPRGen.sh (Pike R. Alpha, April 2014)
 #			- Implement _findPlistBuddy like ssdtPRGen.sh (Pike R. Alpha, April 2014)
+#			- Curl link and other typos fixed (Pike R. Alpha, April 2014)
 #
 
 # Bugs:
@@ -26,7 +27,7 @@
 #
 # Script version info.
 #
-gScriptVersion=0.7
+gScriptVersion=0.8
 
 #
 # Initialised in function _listmatchingFiles()
@@ -264,6 +265,10 @@ function _getModelByPlist()
   # Restore default (0) delimiter.
   #
   IFS=$ifs
+  #
+  # Show 'Unknown' for unsupported plists.
+  #
+  echo "Unknown"
 }
 
 
@@ -310,7 +315,7 @@ function _listmatchingFiles()
   #
   # Check user input.
   #
-  if [[ $selection < 1 || $selection > $index ]];
+  if [[ $selection -lt 1 || $selection -gt $index ]];
     then
       clear
       _showHeader
@@ -342,7 +347,7 @@ function _findPlistBuddy()
   if [ ! -f /usr/libexec/PlistBuddy ];
     then
       printf "\nPlistBuddy not found ... Downloading PlistBuddy ...\n"
-      curl https://raw.github.com/Piker-Alpha/freqVectors.sh/Tools/iasl -o /usr/libexec/PlistBuddy --create-dirs
+      curl https://raw.github.com/Piker-Alpha/freqVectorsEdit.sh/master/Tools/PlistBuddy -o /usr/libexec/PlistBuddy --create-dirs
       chmod +x /usr/libexec/PlistBuddy
       printf "Done."
   fi
@@ -399,6 +404,7 @@ function main()
                 #
                 let gCallOpen=1
           ;;
+      esac
   fi
   #
   # Should we open the Mac-*.plist?
@@ -408,7 +414,7 @@ function main()
       #
       # Yes. Open Mac-*.plist in TextEdit.
       #
-      open -e "${gTargetPlist}""
+      open -e "${gTargetPlist}"
   fi
 
   read -p "Do you want to reboot now? (y/n) " choice
