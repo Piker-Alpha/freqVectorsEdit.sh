@@ -3,21 +3,26 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 0.5 - Copyright (c) 2013-2014 by Pike R. Alpha
+# Version 0.6 - Copyright (c) 2013-2014 by Pike R. Alpha
 #
 # Updates:
 #			- Show Mac model info (Pike R. Alpha, December 2013)
 #			- Check for 'FrequencyVectors' in the Resource directory (Pike R. Alpha, December 2014)
 #			- Touch /S8/L*/Extensions (Pike R. Alpha, Januari 2014)
 #			- Ask if the user wants to reboot (Pike R. Alpha, Februari 2014)
+#			- Bug report/feedback info/link added (Pike R. Alpha, April 2014)
 #
+
+# Bugs:
+#			- Bug reports can be filed at https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues
+#			  Please provide clear steps to reproduce the bug, the output of the script. Thank you!
 
 #================================= GLOBAL VARS ==================================
 
 #
 # Script version info.
 #
-gScriptVersion=0.5
+gScriptVersion=0.6
 
 #
 # Initialised in function _listmatchingFiles()
@@ -118,8 +123,9 @@ function _PRINT()
 
 function _showHeader()
 {
-  printf "freqVectorsEdit.sh v${gScriptVersion} Copyright (c) 2013-$(date "+%Y") by Pike R. Alpha\n"
-  echo "----------------------------------------------------------------\n"
+  printf "freqVectorsEdit.sh v${gScriptVersion} Copyright (c) 2013-$(date "+%Y") by Pike R. Alpha.\n"
+  echo "-----------------------------------------------------------------"
+  printf "Bugs > https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues <\n\n"
 }
 
 
