@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 0.6 - Copyright (c) 2013-2014 by Pike R. Alpha
+# Version 0.7 - Copyright (c) 2013-2014 by Pike R. Alpha
 #
 # Updates:
 #			- Show Mac model info (Pike R. Alpha, December 2013)
@@ -11,18 +11,22 @@
 #			- Touch /S8/L*/Extensions (Pike R. Alpha, Januari 2014)
 #			- Ask if the user wants to reboot (Pike R. Alpha, Februari 2014)
 #			- Bug report/feedback info/link added (Pike R. Alpha, April 2014)
+#			- Cleanups/comments added (Pike R. Alpha, April 2014)
+#			- Implement gCallOpen like ssdtPRGen.sh (Pike R. Alpha, April 2014)
+#			- Implement _findPlistBuddy like ssdtPRGen.sh (Pike R. Alpha, April 2014)
 #
 
 # Bugs:
 #			- Bug reports can be filed at https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues
 #			  Please provide clear steps to reproduce the bug, the output of the script. Thank you!
+#
 
 #================================= GLOBAL VARS ==================================
 
 #
 # Script version info.
 #
-gScriptVersion=0.6
+gScriptVersion=0.7
 
 #
 # Initialised in function _listmatchingFiles()
@@ -45,7 +49,8 @@ gExtensionsDirectory="/System/Library/Extensions"
 gPath="${gExtensionsDirectory}/IOPlatformPluginFamily.kext/Contents/PlugIns/X86PlatformPlugin.kext/Contents/Resources/"
 
 #
-# Known board-id:model combos of configurations with a Haswell processor.
+# Known board-id:model combos of configurations with a Haswell processor,
+# except for Mac-F60DEB81FF30ACF6:MacPro6,1 – our target board-id/model.
 #
 
 gHaswellModelData=(
@@ -84,6 +89,15 @@ gBoardID=""
 # Global variable used for the used/target board-id.
 #
 gModelID=""
+
+#
+# Open generated SSDT on request (default value is 2).
+#
+# 0 = don't open the plist.
+# 1 = open the plist in the editor of your choice.
+# 2 = ask for confirmation before opening the plist in the editor of your choice.
+#
+let gCallOpen=2
 
 #
 # Output styling.
@@ -320,6 +334,25 @@ function _listmatchingFiles()
 #--------------------------------------------------------------------------------
 #
 
+function _findPlistBuddy()
+{
+  #
+  # Lookup PlistBuddy (should be there after the first run).
+  #
+  if [ ! -f /usr/libexec/PlistBuddy ];
+    then
+      printf "\nPlistBuddy not found ... Downloading PlistBuddy ...\n"
+      curl https://raw.github.com/Piker-Alpha/freqVectors.sh/Tools/iasl -o /usr/libexec/PlistBuddy --create-dirs
+      chmod +x /usr/libexec/PlistBuddy
+      printf "Done."
+  fi
+}
+
+
+#
+#--------------------------------------------------------------------------------
+#
+
 function main()
 {
   _showHeader
@@ -330,21 +363,53 @@ function main()
 
   _getModelID
   _DEBUG_PRINT "gModelID: ${gModelID}\n"
-
+  #
+  # Check if PlistBuddy is installed – download it when missing.
+  #
+  _findPlistBuddy
+  #
+  # Export the FrequencyVectors (with help of the Print command) to /tmp/FrequencyVectors.bin
+  #
   /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors" "${gSourcePlist}" > /tmp/FrequencyVectors.bin
-
-  # awk '/<data>.*/,/<\/data>/' "/tmp/FrequencyVectors.xml" | sed -e 's/<\/*data>//' | tr -d '\n' > /tmp/data.txt
-  # base64 -Di /tmp/data.txt -o /tmp/data.bin
-
+  #
+  # Now we remove the 'complimentary' 0x0A byte – something we don't want.
+  #
   perl -pi -e 'chomp if eof' /tmp/FrequencyVectors.bin
-
-  # /usr/libexec/PlistBuddy -c "Import:IOPlatformPowerProfile:FrequencyVectors /tmp/data.bin" ${targetBoardID}
+  #
+  # Import FrequencyVectors into Mac-F60DEB81FF30ACF6.plist
+  #
   /usr/libexec/PlistBuddy -c "Import IOPlatformPowerProfile:FrequencyVectors /tmp/FrequencyVectors.bin" ${gTargetPlist}
-
-  open "${gTargetPlist}"
-
+  #
+  #
+  #
   _DEBUG_PRINT "Triggering a kernelcache refresh ...\n"
   touch "${gExtensionsDirectory}"
+  #
+  # Ask for confirmation before opening the plist?
+  #
+  if [[ $gCallOpen -eq 2 ]];
+    then
+      #
+      # Yes. Ask for confirmation.
+      #
+      read -p "Do you want to open ${gTargetPlist} (y/n)? " openAnswer
+      case "$openAnswer" in
+          y|Y ) #
+                # Ok. Override default behaviour.
+                #
+                let gCallOpen=1
+          ;;
+  fi
+  #
+  # Should we open the Mac-*.plist?
+  #
+  if [[ $gCallOpen -eq 1 ]];
+    then
+      #
+      # Yes. Open Mac-*.plist in TextEdit.
+      #
+      open -e "${gTargetPlist}""
+  fi
 
   read -p "Do you want to reboot now? (y/n) " choice
   case "$choice" in
