@@ -3,18 +3,21 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 0.8 - Copyright (c) 2013-2014 by Pike R. Alpha
+# Version 1.0 - Copyright (c) 2013-2014 by Pike R. Alpha
 #
 # Updates:
-#			- Show Mac model info (Pike R. Alpha, December 2013)
-#			- Check for 'FrequencyVectors' in the Resource directory (Pike R. Alpha, December 2014)
-#			- Touch /S8/L*/Extensions (Pike R. Alpha, Januari 2014)
-#			- Ask if the user wants to reboot (Pike R. Alpha, Februari 2014)
-#			- Bug report/feedback info/link added (Pike R. Alpha, April 2014)
-#			- Cleanups/comments added (Pike R. Alpha, April 2014)
-#			- Implement gCallOpen like ssdtPRGen.sh (Pike R. Alpha, April 2014)
-#			- Implement _findPlistBuddy like ssdtPRGen.sh (Pike R. Alpha, April 2014)
-#			- Curl link and other typos fixed (Pike R. Alpha, April 2014)
+#			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
+#			-		Check for 'FrequencyVectors' in the Resource directory (Pike R. Alpha, December 2014)
+#			-		Touch /S*/L*/Extensions (Pike R. Alpha, Januari 2014)
+#			-		Ask if the user wants to reboot (Pike R. Alpha, Februari 2014)
+#			- v0.6	Bug report/feedback info/link added (Pike R. Alpha, April 2014)
+#			- v0.7	Cleanups/comments added (Pike R. Alpha, April 2014)
+#			-		Implement gCallOpen like ssdtPRGen.sh (Pike R. Alpha, April 2014)
+#			-		Implement _findPlistBuddy like ssdtPRGen.sh (Pike R. Alpha, April 2014)
+#			- v0.8	Curl link and other typos fixed (Pike R. Alpha, April 2014)
+#			- v0.9	Implement _selectEditor like dpEdit.sh (Pike R. Alpha, April 2014)
+#			-		function _convertXML2BIN added (Pike R. Alpha, May 2014)
+#			- v1.0	board-id's of the late iMac and Mac mini added (Pike R. Alpha, October 2014)
 #
 
 # Bugs:
@@ -27,7 +30,27 @@
 #
 # Script version info.
 #
-gScriptVersion=0.8
+gScriptVersion=1.0
+
+#
+# This variable is set to 1 by default and changed to 0 during the first run.
+#
+let gFirstRun=1
+
+#
+# Possible editors.
+#
+#gXcode="/Applications/Xcode.app/Contents/MacOS/Xcode"
+gXcode="/usr/bin/open -Wa /Applications/Xcode.app"
+gNano="/usr/bin/nano"
+gVi="/usr/bin/vi"
+
+#
+# This is the selected editor. By default it is set to: "$gNano"
+# and later, during the first run, updated (do not change this).
+#
+
+gEditor="$gXcode"
 
 #
 # Initialised in function _listmatchingFiles()
@@ -58,12 +81,16 @@ gHaswellModelData=(
 Mac-031B6874CF7F642A:iMac14,1
 Mac-27ADBB7B4CEE8E61:iMac14,2
 Mac-77EB7D7DAF985301:iMac14,3
+Mac-81E3E92DD6088272:iMac14,4
+Mac-42FD25EABCABB274:iMac15,n
+Mac-FA842E06C61E91C5:iMac15,n
 Mac-189A3D4F975D5FFC:MacBookPro11,1
 Mac-3CBD00234E554E41:MacBookPro11,2
 Mac-2BD1B31983FE1663:MacBookPro11,3
 Mac-35C1E88140C3E6CF:MacBookAir6,1
 Mac-7DF21CB3ED6977E5:MacBookAir6,2
 Mac-F60DEB81FF30ACF6:MacPro6,1
+Mac-35C5E08120C7EEAF:Macmini7,1
 )
 
 #
@@ -79,7 +106,7 @@ let gExtraStyling=1
 #
 # Setting the debug mode (default off).
 #
-let gDebug=1
+let gDebug=0
 
 #
 # Global variable used for the used/target board-id.
@@ -101,11 +128,16 @@ gModelID=""
 let gCallOpen=2
 
 #
+# 
+#
+gTargetFileNames=""
+
+#
 # Output styling.
 #
-STYLE_RESET="[0m"
-STYLE_BOLD="[1m"
-STYLE_UNDERLINED="[4m"
+STYLE_RESET="\e[0m"
+STYLE_BOLD="\e[1m"
+STYLE_UNDERLINED="\e[4m"
 
 
 #
@@ -127,7 +159,7 @@ function _PRINT()
       #
       # No. Use the basic output style.
       #
-      printf "${1}"
+      echo $1
   fi
 }
 
@@ -138,9 +170,10 @@ function _PRINT()
 
 function _showHeader()
 {
-  printf "freqVectorsEdit.sh v${gScriptVersion} Copyright (c) 2013-$(date "+%Y") by Pike R. Alpha.\n"
-  echo "-----------------------------------------------------------------"
-  printf "Bugs > https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues <\n\n"
+  echo "freqVectorsEdit.sh v${gScriptVersion} Copyright (c) 2013-$(date "+%Y") by Pike R. Alpha."
+  echo '-----------------------------------------------------------------'
+  echo 'Bugs > https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues <'
+  echo ''
 }
 
 
@@ -152,7 +185,7 @@ function _DEBUG_PRINT()
 {
   if [[ $gDebug -eq 1 ]];
     then
-      printf "$1"
+      echo $1
   fi
 }
 
@@ -178,14 +211,53 @@ function _ABORT()
 {
   if [[ $gExtraStyling -eq 1 ]];
     then
-      printf "Aborting ...\n${STYLE_BOLD}Done.${STYLE_RESET}\n\n"
+      echo 'Aborting ...'
+      echo '${STYLE_BOLD}Done.${STYLE_RESET}'
     else
-      printf "Aborting ...\nDone.\n\n"
+      echo 'Aborting ...'
+      echo 'Done.'
   fi
+
+  echo ''
 
   exit 1
 }
 
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _selectEditor()
+{
+  if [[ $gFirstRun -eq 1 ]];
+    then
+      echo "First run detected: Set default editor for dpEdit.sh:"
+      echo "[1] Xcode"
+      echo "[2] nano"
+      echo "[3] vi"
+      read -p "Please choose the one that you want to use (1/2/3) " editorSelection
+      case "$editorSelection" in
+          1) _DEBUG_PRINT XCODE_SELECTED_AS_EDITOR
+             dpEdit=$(sudo sed -l '/^let gFirstRun=/ s/1/0/' "$0")
+             echo "$dpEdit" | sed '/^gEditor=/ s/"$gNano"/"$gXcode"/' > "$0"
+             gEditor="$gXcode"
+             ;;
+          2) _DEBUG_PRINT NANO_SELECTED_AS_EDITOR
+             dpEdit=$(sudo sed -l '/^let gFirstRun=/ s/1/0/' "$0")
+             echo "$dpEdit" | sed '/^gEditor=/ s/"$gNano"/"$gNano"/' > "$0"
+             gEditor="$gNano"
+             ;;
+          3) _DEBUG_PRINT VI_SELECTED_AS_EDITOR
+             dpEdit=$(sudo sed -l '/^let gFirstRun=/ s/1/0/' "$0")
+             echo "$dpEdit" | sed '/^gEditor=/ s/"$gNano"/"$gVi"/' > "$0"
+             gEditorID="$gVi"
+             ;;
+      esac
+    else
+      _DEBUG_PRINT NOT_FIRST_RUN
+  fi
+}
 
 #
 #--------------------------------------------------------------------------------
@@ -276,23 +348,34 @@ function _getModelByPlist()
 #--------------------------------------------------------------------------------
 #
 
-function _listmatchingFiles()
+function _getResourceFiles()
 {
   cd "${gPath}"
 
+  gTargetFileNames=($(grep -rlse 'FrequencyVectors' .))
+
+  if [[ "${#gTargetFileNames[@]}" -eq 0 ]];
+    then
+      _PRINT_ERROR 'No FrequencyVector data found in X86PlatformPlugin.kext!'
+      _ABORT
+    else
+      _DEBUG_PRINT "${#gTargetFileNames[@]} plists found with FrequencyVectors"
+  fi
+}
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _selectSourceResourceFile()
+{
   local index=0
   local selection=0
-  local fileNames=($(grep -rlse 'FrequencyVectors' .))
 
-  if [[ "${#fileNames[@]}" -eq 0 ]];
-    then
-      _PRINT_ERROR "No FrequencyVector data found in X86PlatformPlugin.kext!\n"
-      _ABORT
-  fi
+  echo 'Available resource files (plists) with FrequencyVectors:'
+  echo ''
 
-  printf "\nAvailable resource files (plists) with FrequencyVectors:\n\n"
-
-  for filename in "${fileNames[@]}"
+  for filename in "${gTargetFileNames[@]}"
   do
     let index++
     #
@@ -304,14 +387,20 @@ function _listmatchingFiles()
     #
     local model=$(_getModelByPlist $file)
 
-    printf " [%d] - ${file} / ${model}\n" ${index}
+    echo " [$index] - $file / $model"
   done
-
-  printf "\nPlease choose the desired plist for your hardware "
+  #
+  #
+  #
+  echo ''
   #
   # Let user make a selection.
   #
-  read -p "[1-${index}]: " selection
+  read -p "Please choose the desired plist for your hardware [1-${index}]: " selection
+  #
+  #
+  #
+  echo ''
   #
   # Check user input.
   #
@@ -328,10 +417,94 @@ function _listmatchingFiles()
       #
       # Initialise global variable with the selected plist.
       #
-      gSourcePlist=${fileNames[$selection]}
+      gSourcePlist=${gTargetFileNames[$selection]}
 
-      _DEBUG_PRINT "gSourcePlist: ${gSourcePlist}\n"
+      _DEBUG_PRINT "gSourcePlist: $gSourcePlist"
   fi
+}
+
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _convertXML2BIN()
+{
+  local index=0
+
+  echo 'Converting XML data to binary files... '
+
+  for plist in "${gTargetFileNames[@]}"
+  do
+    #
+    # Convert filename.
+    #
+    local filename=$(echo "$plist" | sed -e 's/\.\///' -e 's/\.plist/\.bin/')
+    #
+    # Export the FrequencyVectors (with help of the Print command) to /tmp/FrequencyVectors.bin
+    #
+    /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors" "${plist}" > /tmp/${filename}
+    #
+    # Now we remove the 'complimentary' 0x0A byte – something we don't want.
+    #
+    perl -pi -e 'chomp if eof' /tmp/${filename}
+    #
+    #
+    #
+    local filesize=$(stat -f%z /tmp/$filename)
+    echo ''
+    echo "${gTargetFileNames[$index]} converted to: /tmp/${filename} ($filesize bytes)"
+
+    if [[ $(grep -c 'BACKGROUND' /tmp/$filename) -eq 1 ]];
+      then
+        printf ' BACKGROUND'
+    fi
+
+    if [[ $(grep -c 'REALTIME_SHORT' /tmp/$filename) -eq 1 ]];
+      then
+        printf ' REALTIME_SHORT'
+    fi
+
+    if [[ $(grep -c 'THRU_TIER4' /tmp/$filename) -eq 1 ]];
+      then
+        printf ' THRU_TIER4'
+    fi
+
+    if [[ $(grep -c 'THRU_TIER5' /tmp/$filename) -eq 1 ]];
+      then
+        printf ' THRU_TIER5'
+    fi
+
+    if [[ $(grep -c 'hard-rt-ns' /tmp/$filename) -eq 1 ]];
+      then
+        echo ''
+        printf ' hard-rt-ns'
+    fi
+
+    if [[ $(grep -c 'ubpc' /tmp/$filename) -eq 1 ]];
+      then
+        printf ' ubpc'
+    fi
+
+    if [[ $(grep -c 'off' /tmp/$filename) -eq 1 ]];
+      then
+        printf ' off'
+    fi
+
+    if [[ $(grep -c 'perf-bias' /tmp/$filename) -eq 1 ]];
+      then
+        printf ' perf-bias'
+    fi
+
+    #
+    #
+    #
+    let index+=1
+
+    echo ''
+  done
+
+  echo ''
 }
 
 
@@ -346,10 +519,10 @@ function _findPlistBuddy()
   #
   if [ ! -f /usr/libexec/PlistBuddy ];
     then
-      printf "\nPlistBuddy not found ... Downloading PlistBuddy ...\n"
+      echo 'PlistBuddy not found ... Downloading PlistBuddy ...'
       curl https://raw.github.com/Piker-Alpha/freqVectorsEdit.sh/master/Tools/PlistBuddy -o /usr/libexec/PlistBuddy --create-dirs
       chmod +x /usr/libexec/PlistBuddy
-      printf "Done."
+      printf 'Done.'
   fi
 }
 
@@ -361,17 +534,26 @@ function _findPlistBuddy()
 function main()
 {
   _showHeader
-  _listmatchingFiles
-
-  _getBoardID
-  _DEBUG_PRINT "gBoardID: ${gBoardID}\n"
-
-  _getModelID
-  _DEBUG_PRINT "gModelID: ${gModelID}\n"
+  _selectEditor
   #
   # Check if PlistBuddy is installed – download it when missing.
   #
   _findPlistBuddy
+
+  _getResourceFiles
+
+  if [ gDebug ];
+    then
+      _convertXML2BIN
+  fi
+
+  _selectSourceResourceFile
+
+  _getBoardID
+  _DEBUG_PRINT "gBoardID: ${gBoardID}"
+
+  _getModelID
+  _DEBUG_PRINT "gModelID: ${gModelID}"
   #
   # Export the FrequencyVectors (with help of the Print command) to /tmp/FrequencyVectors.bin
   #
@@ -387,13 +569,18 @@ function main()
   #
   #
   #
-  _DEBUG_PRINT "Triggering a kernelcache refresh ...\n"
+  echo ''
+  echo 'Triggering a kernelcache refresh ...'
   touch "${gExtensionsDirectory}"
   #
   # Ask for confirmation before opening the plist?
   #
   if [[ $gCallOpen -eq 2 ]];
     then
+      #
+      #
+      #
+      echo ''
       #
       # Yes. Ask for confirmation.
       #
@@ -414,14 +601,17 @@ function main()
       #
       # Yes. Open Mac-*.plist in TextEdit.
       #
-      open -e "${gTargetPlist}"
+      _DEBUG_PRINT "Launching $gEditor for: ${gTargetPlist}"
+      $gEditor "${gTargetPlist}"
   fi
 
   read -p "Do you want to reboot now? (y/n) " choice
   case "$choice" in
-    y|Y ) reboot now
-          ;;
+    y|Y) reboot now
+         ;;
   esac
+
+  echo ''
 }
 
 #==================================== START =====================================
