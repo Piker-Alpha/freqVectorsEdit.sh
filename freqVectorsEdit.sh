@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 1.0 - Copyright (c) 2013-2014 by Pike R. Alpha
+# Version 1.1 - Copyright (c) 2013-2014 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -17,7 +17,8 @@
 #			- v0.8	Curl link and other typos fixed (Pike R. Alpha, April 2014)
 #			- v0.9	Implement _selectEditor like dpEdit.sh (Pike R. Alpha, April 2014)
 #			-		function _convertXML2BIN added (Pike R. Alpha, May 2014)
-#			- v1.0	board-id's of the late iMac and Mac mini added (Pike R. Alpha, October 2014)
+#			- v1.0	board-id's of the late 2014 iMac and Mac mini added (Pike R. Alpha, October 2014)
+#			- v1.1	board-id's of the late 2014 iMac corrected (Pike R. Alpha, October 2014)
 #
 
 # Bugs:
@@ -30,7 +31,7 @@
 #
 # Script version info.
 #
-gScriptVersion=1.0
+gScriptVersion=1.1
 
 #
 # This variable is set to 1 by default and changed to 0 during the first run.
@@ -82,8 +83,8 @@ Mac-031B6874CF7F642A:iMac14,1
 Mac-27ADBB7B4CEE8E61:iMac14,2
 Mac-77EB7D7DAF985301:iMac14,3
 Mac-81E3E92DD6088272:iMac14,4
-Mac-42FD25EABCABB274:iMac15,n
-Mac-FA842E06C61E91C5:iMac15,n
+Mac-42FD25EABCABB274:iMac15,1
+Mac-FA842E06C61E91C5:iMac15,2
 Mac-189A3D4F975D5FFC:MacBookPro11,1
 Mac-3CBD00234E554E41:MacBookPro11,2
 Mac-2BD1B31983FE1663:MacBookPro11,3
