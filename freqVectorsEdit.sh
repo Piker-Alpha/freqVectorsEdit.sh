@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 1.3 - Copyright (c) 2013-2014 by Pike R. Alpha
+# Version 1.4 - Copyright (c) 2013-2014 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -25,6 +25,7 @@
 #			-       Implement _toLowerCase like AppleIntelFramebufferAzul.sh
 #			-       Option 'Exit' to menus added (Pike R. Alpha, November 2014)
 #			-       Improved layout of menus / styling added like AppleIntelFramebufferAzul.sh
+#			- v1.4  Use function _getBoardID to set target plist (Pike R. Alpha, November 2014)
 #
 
 # Bugs:
@@ -37,7 +38,7 @@
 #
 # Script version info.
 #
-gScriptVersion=1.3
+gScriptVersion=1.4
 
 #
 # This variable is set to 1 by default and changed to 0 during the first run.
@@ -57,7 +58,7 @@ gVi="/usr/bin/vi"
 # and later, during the first run, updated (do not change this).
 #
 
-gEditor="$gXcode"
+gEditor="$gNano"
 
 #
 # Initialised in function _listmatchingFiles()
@@ -65,7 +66,7 @@ gEditor="$gXcode"
 gSourcePlist=""
 
 #
-# Hardcoded to MacPro6,1
+# Initial target is MacPro6,1 (updated in function main)
 #
 gTargetPlist="Mac-F60DEB81FF30ACF6.plist"
 
@@ -655,6 +656,10 @@ function main()
 
   _DEBUG_PRINT "gBoardID: ${gBoardID}"
   _DEBUG_PRINT "gModelID: ${gModelID}"
+  #
+  # Update target plist
+  #
+  gTargetPlist="${gBoardID}.plist"
   #
   # Export the FrequencyVectors (with help of the Print command) to /tmp/FrequencyVectors.bin
   #
