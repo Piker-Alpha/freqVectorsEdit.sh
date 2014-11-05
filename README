@@ -1,0 +1,44 @@
+1) Start script by entering:
+
+./freqVectorsEdit.sh
+
+2) It will now ask you for the administrator (root) password:
+
+This script must be run as root!
+Password: <enter root password>
+
+3) Now you see something like this:
+
+freqVectorsEdit.sh v1.3 Copyright (c) 2013-2014 by Pike R. Alpha.
+-----------------------------------------------------------------
+Bugs > https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues <
+
+Available resource files (plists) with FrequencyVectors:
+
+ [  1 ] Mac-031B6874CF7F642A.plist / iMac14,1
+ [  2 ] Mac-189A3D4F975D5FFC.plist / MacBookPro11,1
+ [  3 ] Mac-27ADBB7B4CEE8E61.plist / iMac14,2
+ [  4 ] Mac-2BD1B31983FE1663.plist / MacBookPro11,3
+ [  5 ] Mac-35C1E88140C3E6CF.plist / MacBookAir6,1
+ [  6 ] Mac-35C5E08120C7EEAF.plist / Macmini7,1
+ [  7 ] Mac-3CBD00234E554E41.plist / MacBookPro11,2
+ [  8 ] Mac-42FD25EABCABB274.plist / iMac15,1
+ [  9 ] Mac-77EB7D7DAF985301.plist / iMac14,3
+ [ 10 ] Mac-7DF21CB3ED6977E5.plist / MacBookAir6,2
+ [ 11 ] Mac-81E3E92DD6088272.plist / iMac14,4
+ [ 12 ] Mac-F60DEB81FF30ACF6.plist / MacPro6,1
+ [ 13 ] Mac-FA842E06C61E91C5.plist / iMac15,2
+
+Please choose the desired plist for your hardware (Exit/1-13) ?
+
+4) Let's use '4' for this run and press enter. After this you see this: 
+
+Triggering a kernelcache refresh ...
+
+Do you want to open Mac-F60DEB81FF30ACF6.plist (y/n)? n
+
+5) Let's use 'n' for this run and press enter. Now it asks you if you want to reboot:
+
+Do you want to reboot now? (y/n) n
+
+6) Let's use 'n' for this run and press enter. You normally would select 'y'.
