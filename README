@@ -2,8 +2,9 @@ Introduction
 
 freqVectorsEdit.sh is a bash script to add/replace FrequencyVectors in plists in X86PlatformPlugin.kext/Contents/Resources/
 This kext can be found in: /System/Library/Extensions/IOPlatformPluginFamily.kext/Contents/PlugIns
-The default target is set to: Mac-F60DEB81FF30ACF6.plist i.e. a MacPro6,1 but you can edit line 70 and replace 
-it with whatever your board-id is, or wait for me to implement a Request For Enhancement that covers this. 
+
+The target plist (example: Mac-F60DEB81FF30ACF6.plist for the MacPro6,1) is selected based on the used board-id.
+
 
 1) Start script by entering:
 
