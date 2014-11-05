@@ -1,24 +1,30 @@
-#!/bin/sh
+#!/bin/bash
 
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 1.1 - Copyright (c) 2013-2014 by Pike R. Alpha
+# Version 1.3 - Copyright (c) 2013-2014 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
-#			-		Check for 'FrequencyVectors' in the Resource directory (Pike R. Alpha, December 2014)
-#			-		Touch /S*/L*/Extensions (Pike R. Alpha, Januari 2014)
-#			-		Ask if the user wants to reboot (Pike R. Alpha, Februari 2014)
+#			-       Check for 'FrequencyVectors' in the Resource directory (Pike R. Alpha, December 2014)
+#			-       Touch /S*/L*/Extensions (Pike R. Alpha, Januari 2014)
+#			-       Ask if the user wants to reboot (Pike R. Alpha, Februari 2014)
 #			- v0.6	Bug report/feedback info/link added (Pike R. Alpha, April 2014)
 #			- v0.7	Cleanups/comments added (Pike R. Alpha, April 2014)
-#			-		Implement gCallOpen like ssdtPRGen.sh (Pike R. Alpha, April 2014)
-#			-		Implement _findPlistBuddy like ssdtPRGen.sh (Pike R. Alpha, April 2014)
+#			-       Implement gCallOpen like ssdtPRGen.sh (Pike R. Alpha, April 2014)
+#			-       Implement _findPlistBuddy like ssdtPRGen.sh (Pike R. Alpha, April 2014)
 #			- v0.8	Curl link and other typos fixed (Pike R. Alpha, April 2014)
 #			- v0.9	Implement _selectEditor like dpEdit.sh (Pike R. Alpha, April 2014)
-#			-		function _convertXML2BIN added (Pike R. Alpha, May 2014)
-#			- v1.0	board-id's of the late 2014 iMac and Mac mini added (Pike R. Alpha, October 2014)
+#			-       function _convertXML2BIN added (Pike R. Alpha, May 2014)
+#			- v1.0	board-id's of the late iMac and Mac mini added (Pike R. Alpha, October 2014)
 #			- v1.1	board-id's of the late 2014 iMac corrected (Pike R. Alpha, October 2014)
+#			- v1.2	Implement _clearLines like AppleIntelFramebufferAzul.sh (Pike R. Alpha, October 2014)
+#			-       Implement _showDelayedDots like AppleIntelFramebufferAzul.sh
+#			- v1.3  Implement _invalidMenuAction like AppleIntelFramebufferAzul.sh (Pike R. Alpha, November 2014)
+#			-       Implement _toLowerCase like AppleIntelFramebufferAzul.sh
+#			-       Option 'Exit' to menus added (Pike R. Alpha, November 2014)
+#			-       Improved layout of menus / styling added like AppleIntelFramebufferAzul.sh
 #
 
 # Bugs:
@@ -31,7 +37,7 @@
 #
 # Script version info.
 #
-gScriptVersion=1.1
+gScriptVersion=1.3
 
 #
 # This variable is set to 1 by default and changed to 0 during the first run.
@@ -140,6 +146,20 @@ STYLE_RESET="\e[0m"
 STYLE_BOLD="\e[1m"
 STYLE_UNDERLINED="\e[4m"
 
+#
+# Color definitions.
+#
+COLOR_BLACK="\e[1m"
+COLOR_RED="\e[1;31m"
+COLOR_GREEN="\e[32m"
+COLOR_DARK_YELLOW="\e[33m"
+COLOR_MAGENTA="\e[1;35m"
+COLOR_PURPLE="\e[35m"
+COLOR_CYAN="\e[36m"
+COLOR_BLUE="\e[1;34m"
+COLOR_ORANGE="\e[31m"
+COLOR_GREY="\e[37m"
+COLOR_END="\e[0m"
 
 #
 #--------------------------------------------------------------------------------
@@ -164,6 +184,67 @@ function _PRINT()
   fi
 }
 
+#
+#--------------------------------------------------------------------------------
+#
+
+function _clearLines()
+{
+  let lines=$1
+
+  if [[ ! lines ]];
+    then
+      let lines=1
+  fi
+
+  for ((line=0; line < lines; line++));
+  do
+    printf "\e[A\e[K"
+  done
+}
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _showDelayedDots()
+{
+  local let index=0
+
+  while [[ $index -lt 3 ]]
+  do
+    let index++
+    sleep 0.150
+    printf "."
+  done
+
+  sleep 0.200
+
+  if [ $# ];
+    then
+      printf $1
+  fi
+}
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _invalidMenuAction()
+{
+  _PRINT_ERROR "Invalid choice!\n       Retrying "
+  _showDelayedDots
+  _clearLines $1+6
+}
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _toLowerCase()
+{
+  echo "`echo $1 | tr '[:upper:]' '[:lower:]'`"
+}
 
 #
 #--------------------------------------------------------------------------------
@@ -176,7 +257,6 @@ function _showHeader()
   echo 'Bugs > https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues <'
   echo ''
 }
-
 
 #
 #--------------------------------------------------------------------------------
@@ -204,7 +284,6 @@ function _PRINT_ERROR()
   fi
 }
 
-
 #
 #--------------------------------------------------------------------------------
 #
@@ -224,7 +303,6 @@ function _ABORT()
   exit 1
 }
 
-
 #
 #--------------------------------------------------------------------------------
 #
@@ -233,28 +311,46 @@ function _selectEditor()
 {
   if [[ $gFirstRun -eq 1 ]];
     then
-      echo "First run detected: Set default editor for dpEdit.sh:"
-      echo "[1] Xcode"
-      echo "[2] nano"
-      echo "[3] vi"
-      read -p "Please choose the one that you want to use (1/2/3) " editorSelection
-      case "$editorSelection" in
-          1) _DEBUG_PRINT XCODE_SELECTED_AS_EDITOR
-             dpEdit=$(sudo sed -l '/^let gFirstRun=/ s/1/0/' "$0")
-             echo "$dpEdit" | sed '/^gEditor=/ s/"$gNano"/"$gXcode"/' > "$0"
-             gEditor="$gXcode"
-             ;;
-          2) _DEBUG_PRINT NANO_SELECTED_AS_EDITOR
-             dpEdit=$(sudo sed -l '/^let gFirstRun=/ s/1/0/' "$0")
-             echo "$dpEdit" | sed '/^gEditor=/ s/"$gNano"/"$gNano"/' > "$0"
-             gEditor="$gNano"
-             ;;
-          3) _DEBUG_PRINT VI_SELECTED_AS_EDITOR
-             dpEdit=$(sudo sed -l '/^let gFirstRun=/ s/1/0/' "$0")
-             echo "$dpEdit" | sed '/^gEditor=/ s/"$gNano"/"$gVi"/' > "$0"
-             gEditorID="$gVi"
-             ;;
+      echo 'First run detected, select editor:'
+      echo ''
+      echo '[ 1 ] Xcode'
+      echo '[ 2 ] nano'
+      echo '[ 3 ] vi'
+      echo ''
+      printf "Please choose the editor that you want to use (${STYLE_UNDERLINED}E${STYLE_RESET}xit/1/2/3)"
+      read -p " ? " editorSelection
+      case "$(_toLowerCase $editorSelection)" in
+        1     ) _DEBUG_PRINT XCODE_SELECTED_AS_EDITOR
+                dpEdit=$(sudo sed -l '/^let gFirstRun=/ s/1/0/' "$0")
+                echo "$dpEdit" | sed '/^gEditor=/ s/"$gNano"/"$gXcode"/' > "$0"
+                gEditor="$gXcode"
+                ;;
+
+        2     ) _DEBUG_PRINT NANO_SELECTED_AS_EDITOR
+                dpEdit=$(sudo sed -l '/^let gFirstRun=/ s/1/0/' "$0")
+                echo "$dpEdit" | sed '/^gEditor=/ s/"$gNano"/"$gNano"/' > "$0"
+                gEditor="$gNano"
+                ;;
+
+        3     ) _DEBUG_PRINT VI_SELECTED_AS_EDITOR
+                dpEdit=$(sudo sed -l '/^let gFirstRun=/ s/1/0/' "$0")
+                echo "$dpEdit" | sed '/^gEditor=/ s/"$gNano"/"$gVi"/' > "$0"
+                gEditorID="$gVi"
+                ;;
+
+        e|exit) printf 'Aborting script '
+                _showDelayedDots
+                _clearLines 8
+                echo 'Done'
+                exit -0
+                ;;
+
+        *     ) _invalidMenuAction 3
+                _selectEditor
+                ;;
       esac
+
+      _clearLines 7
     else
       _DEBUG_PRINT NOT_FIRST_RUN
   fi
@@ -272,7 +368,6 @@ function _getModelID()
   gModelID=$(ioreg -p IODeviceTree -d 2 -k compatible | grep compatible | sed -e 's/ *["=<>]//g' -e 's/compatible//')
 }
 
-
 #
 #--------------------------------------------------------------------------------
 #
@@ -284,7 +379,6 @@ function _getBoardID()
   #
   gBoardID=$(ioreg -p IODeviceTree -d 2 -k board-id | grep board-id | sed -e 's/ *["=<>]//g' -e 's/board-id//')
 }
-
 
 #
 #--------------------------------------------------------------------------------
@@ -344,7 +438,6 @@ function _getModelByPlist()
   echo "Unknown"
 }
 
-
 #
 #--------------------------------------------------------------------------------
 #
@@ -388,7 +481,8 @@ function _selectSourceResourceFile()
     #
     local model=$(_getModelByPlist $file)
 
-    echo " [$index] - $file / $model"
+    printf " [ %2d ] $file / $model" $index
+    echo ''
   done
   #
   #
@@ -397,33 +491,43 @@ function _selectSourceResourceFile()
   #
   # Let user make a selection.
   #
-  read -p "Please choose the desired plist for your hardware [1-${index}]: " selection
-  #
+  printf "Please choose the desired plist for your hardware (${STYLE_UNDERLINED}E${STYLE_RESET}xit/1-${index})"
+  read -p " ? " selection
+  case "$(_toLowerCase $selection)" in
+    e|exit       ) printf 'Aborting script '
+                   _showDelayedDots
+                   _clearLines 5+$index
+                   echo 'Done'
+                   exit -0
+                   ;;
+
+    [[:digit:]]* ) if [[ $selection -lt 1 || $selection -gt $index ]];
+                     then
+                       clear
+                       _showHeader
+                       _listmatchingFiles
+                     else
+                     #
+                     # Lower selection (arrays start at zero).
+                     #
+                     let selection-=1
+                     #
+                     # Initialise global variable with the selected plist.
+                     #
+                     gSourcePlist=${gTargetFileNames[$selection]}
+
+                     _DEBUG_PRINT "gSourcePlist: $gSourcePlist"
+                   fi
+                   ;;
+
+    *            ) _invalidMenuAction $index
+                   _selectSourceResourceFile
+                   ;;
+  esac
   #
   #
   echo ''
-  #
-  # Check user input.
-  #
-  if [[ $selection -lt 1 || $selection -gt $index ]];
-    then
-      clear
-      _showHeader
-      _listmatchingFiles
-    else
-      #
-      # Lower selection (arrays start at zero).
-      #
-      let selection-=1
-      #
-      # Initialise global variable with the selected plist.
-      #
-      gSourcePlist=${gTargetFileNames[$selection]}
-
-      _DEBUG_PRINT "gSourcePlist: $gSourcePlist"
-  fi
 }
-
 
 #
 #--------------------------------------------------------------------------------
@@ -508,7 +612,6 @@ function _convertXML2BIN()
   echo ''
 }
 
-
 #
 #--------------------------------------------------------------------------------
 #
@@ -527,7 +630,6 @@ function _findPlistBuddy()
   fi
 }
 
-
 #
 #--------------------------------------------------------------------------------
 #
@@ -540,7 +642,6 @@ function main()
   # Check if PlistBuddy is installed – download it when missing.
   #
   _findPlistBuddy
-
   _getResourceFiles
 
   if [ gDebug ];
@@ -549,11 +650,10 @@ function main()
   fi
 
   _selectSourceResourceFile
-
   _getBoardID
-  _DEBUG_PRINT "gBoardID: ${gBoardID}"
-
   _getModelID
+
+  _DEBUG_PRINT "gBoardID: ${gBoardID}"
   _DEBUG_PRINT "gModelID: ${gModelID}"
   #
   # Export the FrequencyVectors (with help of the Print command) to /tmp/FrequencyVectors.bin
@@ -621,7 +721,8 @@ clear
 
 if [[ $gID -ne 0 ]];
   then
-    echo "This script ${STYLE_UNDERLINED}must${STYLE_RESET} be run as root!" 1>&2
+    printf "This script ${STYLE_UNDERLINED}must${STYLE_RESET} be run as root!" 1>&2
+    echo ''
     #
     # Re-run script with arguments.
     #
