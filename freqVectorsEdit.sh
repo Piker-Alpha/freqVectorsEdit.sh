@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 1.7 - Copyright (c) 2013-2014 by Pike R. Alpha
+# Version 1.8 - Copyright (c) 2013-2016 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -37,8 +37,16 @@
 #			-       Function _getModelByPlist replaced by _getModelByBoardID
 #			- v1.7  Unused function _getModelByPlist removed (Pike R. Alpha, Februari 2016)
 #			-       Expand function _convertXML2BIN to show new/missing PM data.
+#			- v1.8  Use defaults read to select the editor (Pike R. Alpha, Februari 2016)
+#			-       Cleanups done, typo fixed, style nit and bug fixes.
 #
-
+#
+# Known issues:
+#
+#			- Multiple FrequencyVectors in a plist are currently not supported/show up blank.
+#			- Available plist are shown in random order instead of Haswell, Broadwell and Skylake.
+#
+#
 # Bugs:
 #			- Bug reports can be filed at https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues
 #			  Please provide clear steps to reproduce the bug, the output of the script. Thank you!
@@ -49,7 +57,7 @@
 #
 # Script version info.
 #
-gScriptVersion=1.7
+gScriptVersion=1.8
 
 #
 # This variable is set to 1 by default and changed to 0 during the first run.
@@ -62,11 +70,11 @@ let gFirstRun=0
 gHome=$(echo $HOME)
 gPath="${gHome}/Library/ssdtPRGen"
 gDataPath="${gPath}/Data"
+gPrefsPath="${gHome}/Library/Preferences"
 
 #
 # Possible editors.
 #
-#gXcode="/Applications/Xcode.app/Contents/MacOS/Xcode"
 gXcode="/usr/bin/open -Wa /Applications/Xcode.app"
 gNano="/usr/bin/nano"
 gVi="/usr/bin/vi"
@@ -97,27 +105,6 @@ gExtensionsDirectory="/System/Library/Extensions"
 # Path to kext.
 #
 gPath="${gExtensionsDirectory}/IOPlatformPluginFamily.kext/Contents/PlugIns/X86PlatformPlugin.kext/Contents/Resources/"
-
-#
-# Known board-id:model combos of configurations with a Haswell processor,
-# except for Mac-F60DEB81FF30ACF6:MacPro6,1 – our target board-id/model.
-#
-
-#gHaswellModelData=(
-#Mac-031B6874CF7F642A:iMac14,1
-#Mac-27ADBB7B4CEE8E61:iMac14,2
-#Mac-77EB7D7DAF985301:iMac14,3
-#Mac-81E3E92DD6088272:iMac14,4
-#Mac-42FD25EABCABB274:iMac15,1
-#Mac-FA842E06C61E91C5:iMac15,2
-#Mac-189A3D4F975D5FFC:MacBookPro11,1
-#Mac-3CBD00234E554E41:MacBookPro11,2
-#Mac-2BD1B31983FE1663:MacBookPro11,3
-#Mac-35C1E88140C3E6CF:MacBookAir6,1
-#Mac-7DF21CB3ED6977E5:MacBookAir6,2
-#Mac-F60DEB81FF30ACF6:MacPro6,1
-#Mac-35C5E08120C7EEAF:Macmini7,1
-#)
 
 #
 # Get user id
@@ -164,21 +151,6 @@ gTargetFileNames=""
 STYLE_RESET="\e[0m"
 STYLE_BOLD="\e[1m"
 STYLE_UNDERLINED="\e[4m"
-
-#
-# Color definitions.
-#
-#COLOR_BLACK="\e[1m"
-#COLOR_RED="\e[1;31m"
-#COLOR_GREEN="\e[32m"
-#COLOR_DARK_YELLOW="\e[33m"
-#COLOR_MAGENTA="\e[1;35m"
-#COLOR_PURPLE="\e[35m"
-#COLOR_CYAN="\e[36m"
-#COLOR_BLUE="\e[1;34m"
-#COLOR_ORANGE="\e[31m"
-#COLOR_GREY="\e[37m"
-#COLOR_END="\e[0m"
 
 #
 #--------------------------------------------------------------------------------
@@ -285,7 +257,7 @@ function _showHeader()
 {
   printf "${STYLE_BOLD}freqVectorsEdit.sh${STYLE_RESET} v${gScriptVersion} Copyright (c) 2013-$(date "+%Y") by Pike R. Alpha.\n"
   echo '-----------------------------------------------------------------'
-  printf "${STYLE_BOLD}Bugs${STYLE_RESET} > https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues <\n"
+  printf "${STYLE_BOLD}Bugs${STYLE_RESET} > https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues <\n\n"
 }
 
 #
@@ -296,7 +268,7 @@ function _DEBUG_PRINT()
 {
   if [[ $gDebug -eq 1 ]];
     then
-      echo $1
+      echo -e $1
   fi
 }
 
@@ -339,7 +311,7 @@ function _selectEditor()
 
         3     ) _DEBUG_PRINT VI_SELECTED_AS_EDITOR
                 defaults write com.wordpress.pikeralpha freqVectorsEditor vi
-                gEditorID="$gVi"
+                gEditor="$gVi"
                 ;;
 
         e|exit) printf 'Aborting script '
@@ -356,7 +328,21 @@ function _selectEditor()
 
       _clearLines 7
     else
-      _DEBUG_PRINT NOT_FIRST_RUN
+      local editor=$(defaults read "${gPrefsPath}/com.wordpress.pikeralpha" freqVectorsEditor)
+
+      case "$editor" in
+        xcode) _DEBUG_PRINT XCODE_SELECTED_AS_EDITOR
+               gEditor="$gXcode"
+               ;;
+
+        nano  ) _DEBUG_PRINT NANO_SELECTED_AS_EDITOR
+                gEditor="$gNano"
+               ;;
+
+        vi    ) _DEBUG_PRINT VI_SELECTED_AS_EDITOR
+                gEditor="$gVi"
+                ;;
+      esac
   fi
 }
 
@@ -382,64 +368,6 @@ function _getBoardID()
   # Grab 'board-id' property from ioreg (stripped with sed / RegEX magic).
   #
   gBoardID=$(ioreg -p IODeviceTree -d 2 -k board-id | grep board-id | sed -e 's/ *["=<>]//g' -e 's/board-id//')
-}
-
-#
-#--------------------------------------------------------------------------------
-#
-
-function _getModelByPlist()
-{
-  #
-  # Strip '.plist' from filename.
-  #
-  local targetModel=$(echo "$1" | sed 's/\.plist//')
-  #
-  #
-  #
-  local modelDataList="gHaswellModelData[@]"
-  #
-  # Split 'modelDataList' into array.
-  #
-  local targetList=("${!modelDataList}")
-  #
-  # Change delimiter to a colon character.
-  #
-  IFS=":"
-  #
-  # Loop through target list.
-  #
-  for modelData in "${targetList[@]}"
-  do
-    #
-    # Split 'modelData' into array.
-    #
-    data=($modelData)
-
-    if [[ "${data[0]}" == "${targetModel}" ]];
-      then
-        #
-        # Restore default (0) delimiter.
-        #
-        IFS=$ifs
-        #
-        # Model found.
-        #
-        echo "${data[1]}"
-        #
-        #
-        #
-        return
-    fi
-  done
-  #
-  # Restore default (0) delimiter.
-  #
-  IFS=$ifs
-  #
-  # Show 'Unknown' for unsupported plists.
-  #
-  echo "Unknown"
 }
 
 #
@@ -481,7 +409,7 @@ function _selectSourceResourceFile()
     #
     local file=$(echo "$filename" | sed 's/\.\///')
     #
-    # Get board-id (by chopping off the extension).
+    # Get board-id (by chopping off the file extension).
     #
     local boardID=${file%.*}
     #
@@ -506,7 +434,14 @@ function _selectSourceResourceFile()
   case "$(_toLowerCase $selection)" in
     e|exit       ) printf 'Aborting script '
                    _showDelayedDots
-                   _clearLines 5+$index
+
+                   if [[ $gDebug -eq 1 ]];
+                     then
+                       _clearLines 8+$index
+                     else
+                       _clearLines 5+$index
+                   fi
+
                    echo 'Done'
                    exit -0
                    ;;
@@ -585,12 +520,17 @@ function _getPMValue()
                     _toLittleEndian "${matchingData:24:8}"
                     ;;
 
-    perf-bias     ) # 70 65 72 66 2D 62 69 61 73 00 00 00 00 00 00 00 00 00 00 00 05 00 00 00
+    perf-bias     ) # 70 65 72 66 2D 62 69 61 73 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00
+                    # 70 65 72 66 2D 62 69 61 73 00 00 00 00 00 00 00 00 00 00 00 05 00 00 00
                     matchingData=$(egrep -o '706572662d626961730{22}[0-9a-f]{8}' "$filename")
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     utility-tlvl  ) # 75 74 69 6C 69 74 79 2D 74 6C 76 6C 00 00 00 00 00 00 00 00 28 00 00 00
+                    # 75 74 69 6C 69 74 79 2D 74 6C 76 6C 00 00 00 00 00 00 00 00 3d 00 00 00
+                    # 75 74 69 6C 69 74 79 2D 74 6C 76 6C 00 00 00 00 00 00 00 00 3e 00 00 00
+                    # 75 74 69 6C 69 74 79 2D 74 6C 76 6C 00 00 00 00 00 00 00 00 4e 00 00 00
+                    # 75 74 69 6C 69 74 79 2D 74 6C 76 6C 00 00 00 00 00 00 00 00 4f 00 00 00
                     matchingData=$(egrep -o '7574696c6974792d746c766c0{16}[0-9a-f]{8}' "$filename")
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
@@ -982,7 +922,7 @@ function _getScriptArguments()
             #
             # Is this a valid flag?
             #
-            if [[ "${flag}" =~ ^[-bm]+$ ]];
+            if [[ "${flag}" =~ ^[-bdm]+$ ]];
               then
                 #
                 # Yes. Figure out what flag it is.
@@ -999,6 +939,20 @@ function _getScriptArguments()
                           fi
                         else
                           _invalidArgumentError "-b $1"
+                      fi
+                      ;;
+
+                  -d) shift
+
+                      if [[ "$1" =~ ^[01]+$ ]];
+                        then
+                          if [[ $gDebug -ne $1 ]];
+                            then
+                              let gDebug=$1
+                              _PRINT_MSG "Override value: (-d) debug mode, now using: ${gDebug}!"
+                          fi
+                        else
+                          _invalidArgumentError "-d $1"
                       fi
                       ;;
 
@@ -1043,18 +997,32 @@ function main()
   #
   _findPlistBuddy
   _getResourceFiles
-
-  if [ gDebug ];
+  #
+  # Check if -d argument was used.
+  #
+  if [[ $gDebug -eq 1 ]];
     then
       _convertXML2BIN
   fi
+  #
+  # Check if -b argument was used.
+  #
+  if [[ $gBoardID == "" ]];
+    then
+      _getBoardID
+  fi
+  #
+  # Check if -m argument was used.
+  #
+  if [[ $gModelID == "" ]];
+    then
+      _getModelID
+  fi
+
+  _DEBUG_PRINT "Used board-id: ${gBoardID}"
+  _DEBUG_PRINT "Used model...: ${gModelID}\n"
 
   _selectSourceResourceFile
-  _getBoardID
-  _getModelID
-
-  _DEBUG_PRINT "gBoardID: ${gBoardID}"
-  _DEBUG_PRINT "gModelID: ${gModelID}"
   #
   # Update target plist
   #
