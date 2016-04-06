@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 1.8 - Copyright (c) 2013-2016 by Pike R. Alpha
+# Version 1.9 - Copyright (c) 2013-2016 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -39,6 +39,10 @@
 #			-       Expand function _convertXML2BIN to show new/missing PM data.
 #			- v1.8  Use defaults read to select the editor (Pike R. Alpha, Februari 2016)
 #			-       Cleanups done, typo fixed, style nit and bug fixes.
+#			- v1.9  Fix defaults read to select the editor (Pike R. Alpha, Februari 2016)
+#			-       Variable gFirstRun removed (no longer used).
+#			-       Calls to _showHeader and _selectEditor moved out of main.
+#			- v2.0  Dump HWP and EPP settings (Pike R. Alpha, April 2016)
 #
 #
 # Known issues:
@@ -57,12 +61,7 @@
 #
 # Script version info.
 #
-gScriptVersion=1.8
-
-#
-# This variable is set to 1 by default and changed to 0 during the first run.
-#
-let gFirstRun=0
+gScriptVersion=2.0
 
 #
 # Path and filename setup.
@@ -104,7 +103,7 @@ gExtensionsDirectory="/System/Library/Extensions"
 #
 # Path to kext.
 #
-gPath="${gExtensionsDirectory}/IOPlatformPluginFamily.kext/Contents/PlugIns/X86PlatformPlugin.kext/Contents/Resources/"
+gResourcePath="${gExtensionsDirectory}/IOPlatformPluginFamily.kext/Contents/PlugIns/X86PlatformPlugin.kext/Contents/Resources"
 
 #
 # Get user id
@@ -288,8 +287,24 @@ function _ABORT()
 
 function _selectEditor()
 {
-  if [[ $gFirstRun -eq 1 ]];
+  if [[ -f "${gPrefsPath}/com.wordpress.pikeralpha.plist" ]];
     then
+      local editor=$(defaults read "${gPrefsPath}/com.wordpress.pikeralpha" freqVectorsEditor)
+
+      case "$editor" in
+        xcode) _DEBUG_PRINT XCODE_SELECTED_AS_EDITOR
+               gEditor="$gXcode"
+               ;;
+
+        nano  ) _DEBUG_PRINT NANO_SELECTED_AS_EDITOR
+                gEditor="$gNano"
+                ;;
+
+        vi    ) _DEBUG_PRINT VI_SELECTED_AS_EDITOR
+                gEditor="$gVi"
+                ;;
+      esac
+    else
       echo 'First run detected, select editor:'
       echo ''
       echo '[ 1 ] Xcode'
@@ -300,17 +315,17 @@ function _selectEditor()
       read -p " ? " editorSelection
       case "$(_toLowerCase $editorSelection)" in
         1     ) _DEBUG_PRINT XCODE_SELECTED_AS_EDITOR
-                defaults write com.wordpress.pikeralpha freqVectorsEditor xcode
+                defaults write "${gPrefsPath}/com.wordpress.pikeralpha" freqVectorsEditor -string xcode
                 gEditor="$gXcode"
                 ;;
 
         2     ) _DEBUG_PRINT NANO_SELECTED_AS_EDITOR
-                defaults write com.wordpress.pikeralpha freqVectorsEditor nano
+                defaults write "${gPrefsPath}/com.wordpress.pikeralpha" freqVectorsEditor -string nano
                 gEditor="$gNano"
                 ;;
 
         3     ) _DEBUG_PRINT VI_SELECTED_AS_EDITOR
-                defaults write com.wordpress.pikeralpha freqVectorsEditor vi
+                defaults write "${gPrefsPath}/com.wordpress.pikeralpha" freqVectorsEditor -string vi
                 gEditor="$gVi"
                 ;;
 
@@ -325,24 +340,7 @@ function _selectEditor()
                 _selectEditor
                 ;;
       esac
-
       _clearLines 7
-    else
-      local editor=$(defaults read "${gPrefsPath}/com.wordpress.pikeralpha" freqVectorsEditor)
-
-      case "$editor" in
-        xcode) _DEBUG_PRINT XCODE_SELECTED_AS_EDITOR
-               gEditor="$gXcode"
-               ;;
-
-        nano  ) _DEBUG_PRINT NANO_SELECTED_AS_EDITOR
-                gEditor="$gNano"
-               ;;
-
-        vi    ) _DEBUG_PRINT VI_SELECTED_AS_EDITOR
-                gEditor="$gVi"
-                ;;
-      esac
   fi
 }
 
@@ -376,7 +374,7 @@ function _getBoardID()
 
 function _getResourceFiles()
 {
-  cd "${gPath}"
+  cd "${gResourcePath}"
 
   gTargetFileNames=($(grep -rlse 'FrequencyVectors' .))
 
@@ -520,6 +518,34 @@ function _getPMValue()
                     _toLittleEndian "${matchingData:24:8}"
                     ;;
 
+    on            ) # 6F 6E 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    matchingData=$(egrep -o '6F6E{28}[0-9a-f]{8}' "$filename")
+                    _toLittleEndian "${matchingData:24:8}"
+                    ;;
+
+    hwp           ) #
+                    # HardWare-controlled Performance states.
+                    #
+                    # 68 77 70 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00
+                    matchingData=$(egrep -o '6877700{26}[0-9a-f]{8}' "$filename")
+                    _toLittleEndian "${matchingData:32:8}"
+                    ;;
+
+    epp           ) #
+                    # Energy Performance Preference.
+                    #
+                    # Conveys a hint to the HWP hardware. The OS may write a range of values from 0 (performance preference) to 0FFH (energy efficiency preference)
+                    # to influence the rate of performance increase / decrease and the result of the hardware's energy efficiency and performance optimizations. The
+                    # default value of this field is 80H.
+                    #
+                    # Note: If CPUID.06H:EAX[bit 10] indicates that this field is not supported, HWP uses the value of the IA32_ENERGY_PERF_BIAS MSR (perf-bias) to
+                    #       determine the energy efficiency / performance preference.
+                    #
+                    # 65 70 70 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 92 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    matchingData=$(egrep -o '6570700{34}[0-9a-f]{8}' "$filename")
+                    _toLittleEndian "${matchingData:40:8}"
+                    ;;
+
     perf-bias     ) # 70 65 72 66 2D 62 69 61 73 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00
                     # 70 65 72 66 2D 62 69 61 73 00 00 00 00 00 00 00 00 00 00 00 05 00 00 00
                     matchingData=$(egrep -o '706572662d626961730{22}[0-9a-f]{8}' "$filename")
@@ -540,6 +566,25 @@ function _getPMValue()
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
+    iocs_engage   ) # 69 6F 63 73 5F 65 6E 67 61 67 65 00 00 00 00 00 00 00 00 00 00 6A 18 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    matchingData=$(egrep -o '696f63735f656e676167650{18}[0-9a-f]{8}' "$filename")
+                    _toLittleEndian "${matchingData:40:8}"
+                    ;;
+
+    iocs_disengage) # 69 6F 63 73 5F 64 69 73 65 6E 67 61 67 65 00 00 00 00 00 00 A0 25 26 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    matchingData=$(egrep -o '696f63735f646973656e676167650{12}[0-9a-f]{8}' "$filename")
+                    _toLittleEndian "${matchingData:40:8}"
+                    ;;
+
+    iocs_cstflr   ) # 69 6F 63 73 5F 63 73 74 66 6C 72 00 00 00 00 00 00 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    matchingData=$(egrep -o '696f63735f637374666c720{18}[0-9a-f]{8}' "$filename")
+                    _toLittleEndian "${matchingData:40:8}"
+                    ;;
+
+    iocs_rtrigger ) # 69 6F 63 73 5F 72 74 72 69 67 67 65 72 00 00 00 00 00 00 00 64 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    matchingData=$(egrep -o '696f63735f72747269676765720{14}[0-9a-f]{8}' "$filename")
+                    _toLittleEndian "${matchingData:40:8}"
+                    ;;
      *        )
                 ;;
   esac
@@ -568,7 +613,7 @@ function _convertXML2BIN()
     #
     # Export the FrequencyVectors (with help of the Print command) to /tmp/[board-id].bin
     #
-    sudo /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors" "${plist}" > "/tmp/${boardID}.bin"
+    sudo /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors:0" "${plist}" > "/tmp/${boardID}.bin"
     #
     # Now we remove the trailing 0x0A byte – which we don't need.
     #
@@ -589,9 +634,62 @@ function _convertXML2BIN()
     echo ''
     echo "Data from ${boardID}.plist ($model) converted to: /tmp/${boardID}.bin ($filesize bytes)"
     #
+    #
+    #
+    local frequencies=$(sudo /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:Frequencies" "${plist}" 2>&1)
+    #
+    #
+    #
+    if [[ ! $frequencies =~ "Does Not Exist" ]];
+      then
+        local index=0
+        #
+        # frequencies is now something like this:
+        #
+        # Dict {
+        #     2600 = 1
+        #     2900 = 2
+        #     2400 = 0
+        # }
+        #
+        frequencies=$(echo $frequencies | sed -e 's/Dict {//' -e 's/}//'  -e 's/=//g')
+        #
+        # Now we have this.
+        #
+        #     2600 = 1
+        #     2900 = 2
+        #     2400 = 0
+        #
+        frequencies=($frequencies)
+        #
+        # And now this:
+        #
+        # 2600
+        # 1
+        # 2900
+        # 2
+        # 2400
+        # 0
+        #
+
+       if [[ "${#frequencies[@]}" ]];
+         then
+           printf "${STYLE_BOLD}Frequencies:${STYLE_RESET} ${frequencies[0]} MHz (FrequencyVectors @ ${frequencies[1]})\n"
+           let index+=2
+       fi
+
+       while [ $index -lt "${#frequencies[@]}" ];
+       do
+         printf "\t   - ${frequencies[${index}]} MHz "
+         let index++
+         printf "(FrequencyVectors @ ${frequencies[${index}]})\n"
+         let index++
+       done
+    fi
+    #
     # Data types.
     #
-    local targetData=('BACKGROUND','REALTIME_SHORT','KERNEL','THRU_TIER2','THRU_TIER3','THRU_TIER4','THRU_TIER5','hard-rt-ns','ubpc','off','perf-bias','utility-tlvl','non-focal-tlvl')
+    local targetData=('BACKGROUND','REALTIME_SHORT','REALTIME_LONG','KERNEL','THRU_TIER1','THRU_TIER2','THRU_TIER3','THRU_TIER4','THRU_TIER5','GRAPHICS_SERVER','hard-rt-ns','ubpc','off','on','hwp','epp','perf-bias','utility-tlvl','non-focal-tlvl','iocs_engage','iocs_disengage','iocs_cstflr','iocs_rtrigger')
     #
     # Save default (0) delimiter.
     #
@@ -624,7 +722,7 @@ function _convertXML2BIN()
     do
       let item+=1
 
-      if [[ $count -gt 0 && $item -eq 8 ]];
+      if [[ $count -gt 0 && $item -eq 10 || $item -eq 17 ]];
         then
           printf "\n\t    "
           let count=0
@@ -639,9 +737,7 @@ function _convertXML2BIN()
 
           let count+=1
 
-          printf "${target}"
-
-          if [[ $item -ge 8 ]];
+          if [[ $item -ge 10 ]];
             then
               local value=$(_getPMValue $target)
               printf " (${value})"
@@ -988,10 +1084,8 @@ function _getScriptArguments()
 
 function main()
 {
-  _showHeader
   _checkLibraryDirectory
   _getScriptArguments "$@"
-  _selectEditor
   #
   # Check if PlistBuddy is installed – download it when missing.
   #
@@ -1028,17 +1122,27 @@ function main()
   #
   gTargetPlist="${gBoardID}.plist"
   #
-  # Export the FrequencyVectors (with help of the Print command) to /tmp/FrequencyVectors.bin
   #
-  /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors" "${gSourcePlist}" > /tmp/FrequencyVectors.bin
+  #
+  if [[ ! -f /tmp/FrequencyVectors.bin ]];
+    then
+      #
+      # Export the FrequencyVectors (with help of the Print command) to /tmp/FrequencyVectors.bin
+      #
+#     sudo echo "Array {" > /tmp/FrequencyVectors.bin
+#     /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors:0" "${gSourcePlist}" > /tmp/tmp.bin
+      /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors:0" "${gSourcePlist}" >/tmp/FrequencyVectors.bin
+#     cat /tmp/tmp.bin >> /tmp/FrequencyVectors.bin
+#     sudo echo "}" >> /tmp/FrequencyVectors.bin
+  fi
   #
   # Now we remove the 'complimentary' 0x0A byte – something we don't want.
   #
   perl -pi -e 'chomp if eof' /tmp/FrequencyVectors.bin
   #
-  # Import FrequencyVectors into Mac-F60DEB81FF30ACF6.plist
+  # Import FrequencyVectors into target plist (for example: Mac-F60DEB81FF30ACF6.plist).
   #
-  /usr/libexec/PlistBuddy -c "Import IOPlatformPowerProfile:FrequencyVectors /tmp/FrequencyVectors.bin" ${gTargetPlist}
+  /usr/libexec/PlistBuddy -c "Import IOPlatformPowerProfile:FrequencyVectors:0 /tmp/FrequencyVectors.bin" ${gTargetPlist}
   #
   #
   #
@@ -1074,8 +1178,18 @@ function main()
       #
       # Yes. Open Mac-*.plist in TextEdit.
       #
-      _DEBUG_PRINT "Launching $gEditor for: ${gTargetPlist}"
-      $gEditor "${gTargetPlist}"
+      xcodePath=$(xcode-select --print-path)
+      #
+      # Check Xcode path (editor fails with commands line tools only installed).
+      #
+      if [[ $xcodePath =~ "CommandLineTools" ]];
+        then
+          _PRINT_MSG "Error: Xcode.app not found. Please install it!\n"
+          _ABORT
+        else
+          _DEBUG_PRINT "Launching $gEditor for: ${gTargetPlist}"
+          $gEditor "${gResourcePath}/${gTargetPlist}"
+      fi
   fi
 
   read -p "Do you want to reboot now? (y/n) " choice
@@ -1090,6 +1204,8 @@ function main()
 #==================================== START =====================================
 
 clear
+_showHeader
+_selectEditor
 
 if [[ $gID -ne 0 ]];
   then
