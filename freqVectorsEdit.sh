@@ -43,6 +43,7 @@
 #			-       Variable gFirstRun removed (no longer used).
 #			-       Calls to _showHeader and _selectEditor moved out of main.
 #			- v2.0  Dump HWP and EPP settings (Pike R. Alpha, April 2016)
+#			- v2.1  Fix regression in debug output (Pike R. Alpha, April 2016)
 #
 #
 # Known issues:
@@ -61,7 +62,7 @@
 #
 # Script version info.
 #
-gScriptVersion=2.0
+gScriptVersion=2.1
 
 #
 # Path and filename setup.
@@ -736,6 +737,8 @@ function _convertXML2BIN()
           fi
 
           let count+=1
+
+          printf "${target}"
 
           if [[ $item -ge 10 ]];
             then
