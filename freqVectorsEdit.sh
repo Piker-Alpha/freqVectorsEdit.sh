@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 1.9 - Copyright (c) 2013-2016 by Pike R. Alpha
+# Version 2.2 - Copyright (c) 2013-2016 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -44,6 +44,7 @@
 #			-       Calls to _showHeader and _selectEditor moved out of main.
 #			- v2.0  Dump HWP and EPP settings (Pike R. Alpha, April 2016)
 #			- v2.1  Fix regression in debug output (Pike R. Alpha, April 2016)
+#			- v2.2  Remove StepContextDict from plist (Pike R. Alpha, July 2016)
 #
 #
 # Known issues:
@@ -62,7 +63,7 @@
 #
 # Script version info.
 #
-gScriptVersion=2.1
+gScriptVersion=2.2
 
 #
 # Path and filename setup.
@@ -1146,6 +1147,10 @@ function main()
   # Import FrequencyVectors into target plist (for example: Mac-F60DEB81FF30ACF6.plist).
   #
   /usr/libexec/PlistBuddy -c "Import IOPlatformPowerProfile:FrequencyVectors:0 /tmp/FrequencyVectors.bin" ${gTargetPlist}
+  #
+  # Remove StepContextDict
+  #
+  /usr/libexec/PlistBuddy -c "Remove IOPlatformPowerProfile:StepContextDict" ${gTargetPlist}
   #
   #
   #
