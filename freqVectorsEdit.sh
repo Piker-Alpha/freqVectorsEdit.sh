@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 2.2 - Copyright (c) 2013-2016 by Pike R. Alpha
+# Version 2.3 - Copyright (c) 2013-2016 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -45,6 +45,9 @@
 #			- v2.0  Dump HWP and EPP settings (Pike R. Alpha, April 2016)
 #			- v2.1  Fix regression in debug output (Pike R. Alpha, April 2016)
 #			- v2.2  Remove StepContextDict from plist (Pike R. Alpha, July 2016)
+#			- v2.3  Check for FrequencyVectors array added.
+#			-       Add array for FrequencyVectors when it is missing.
+#			-       Quick and dirty fix for Xcode-beta.app added.
 #
 #
 # Known issues:
@@ -63,7 +66,7 @@
 #
 # Script version info.
 #
-gScriptVersion=2.2
+gScriptVersion=2.3
 
 #
 # Path and filename setup.
@@ -295,6 +298,12 @@ function _selectEditor()
 
       case "$editor" in
         xcode) _DEBUG_PRINT XCODE_SELECTED_AS_EDITOR
+
+               if [ -x /Applications/Xcode-beta.app ];
+                 then
+                   gXcode="/usr/bin/open -Wa /Applications/Xcode-beta.app"
+               fi
+
                gEditor="$gXcode"
                ;;
 
@@ -592,6 +601,26 @@ function _getPMValue()
   esac
 }
 
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _checkPlistForEntry()
+{
+  local entry=$1
+  local plist=$2
+  local result=$(/usr/libexec/PlistBuddy -x -c "Print ${entry}" "${plist}" 2>&1)
+
+  if [[ $result =~ "Does Not Exist" ]];
+    then
+      return 0
+  fi
+
+  return 1
+}
+
+
 #
 #--------------------------------------------------------------------------------
 #
@@ -638,12 +667,15 @@ function _convertXML2BIN()
     #
     #
     #
-    local frequencies=$(sudo /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:Frequencies" "${plist}" 2>&1)
+    _checkPlistForEntry "IOPlatformPowerProfile:Frequencies" "${plist}"
     #
+    # Are there any Frequencies specified?
     #
-    #
-    if [[ ! $frequencies =~ "Does Not Exist" ]];
+    if [[ $? -eq 1 ]];
       then
+        #
+        # Yes.
+        #
         local index=0
         #
         # frequencies is now something like this:
@@ -1144,13 +1176,37 @@ function main()
   #
   perl -pi -e 'chomp if eof' /tmp/FrequencyVectors.bin
   #
+  # Check for FrequencyVectors array.
+  #
+  _checkPlistForEntry "IOPlatformPowerProfile:FrequencyVectors" "${gTargetPlist}"
+  #
+  # Is there a FrequencyVectors array in the target plist?
+  #
+  if [[ $? -eq 0 ]];
+    then
+      #
+      # No. Not there. Let's add the array.
+      #
+      /usr/libexec/PlistBuddy -c "Add IOPlatformPowerProfile:FrequencyVectors array" "${gTargetPlist}"
+  fi
+  #
   # Import FrequencyVectors into target plist (for example: Mac-F60DEB81FF30ACF6.plist).
   #
-  /usr/libexec/PlistBuddy -c "Import IOPlatformPowerProfile:FrequencyVectors:0 /tmp/FrequencyVectors.bin" ${gTargetPlist}
+  /usr/libexec/PlistBuddy -c "Import IOPlatformPowerProfile:FrequencyVectors:0 /tmp/FrequencyVectors.bin" "${gTargetPlist}"
   #
-  # Remove StepContextDict
+  # Check for StepContextDict.
   #
-  /usr/libexec/PlistBuddy -c "Remove IOPlatformPowerProfile:StepContextDict" ${gTargetPlist}
+  _checkPlistForEntry "IOPlatformPowerProfile:StepContextDict" "${gTargetPlist}"
+  #
+  # Is there a StepContextDict dictionary in the target plist?
+  #
+  if [[ $? -eq 1 ]];
+    then
+      #
+      # Yes. Remove it (we don't want it).
+      #
+      /usr/libexec/PlistBuddy -c "Remove IOPlatformPowerProfile:StepContextDict" "${gTargetPlist}"
+  fi
   #
   #
   #
@@ -1192,9 +1248,33 @@ function main()
       #
       if [[ $xcodePath =~ "CommandLineTools" ]];
         then
-          _PRINT_MSG "Error: Xcode.app not found. Please install it!\n"
-          _ABORT
+          #
+          # Check if the Xcode.app is installed.
+          #
+          if [ -x /Applications/Xcode.app ];
+            then
+              local XcodeIsFound=1
+            else
+              #
+              # Check if the Xcode-beta.app is installed.
+              #
+              if [ -x /Applications/Xcode-beta.app ];
+                then
+                  local XcodeIsFound=1
+                else
+                  #
+                  # Yikes. Also not there. Error out.
+                  #
+                  _PRINT_MSG "Error: Xcode.app not found. Please install it!\n"
+                  _ABORT
+              fi
+          fi
         else
+          local XcodeIsFound=1
+      fi
+
+      if [[ $XcodeIsFound -eq 1 ]];
+        then
           _DEBUG_PRINT "Launching $gEditor for: ${gTargetPlist}"
           $gEditor "${gResourcePath}/${gTargetPlist}"
       fi
