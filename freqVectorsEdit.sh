@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 2.3 - Copyright (c) 2013-2016 by Pike R. Alpha
+# Version 2.5 - Copyright (c) 2013-2017 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -48,6 +48,8 @@
 #			- v2.3  Check for FrequencyVectors array added.
 #			-       Add array for FrequencyVectors when it is missing.
 #			-       Quick and dirty fix for Xcode-beta.app added.
+#			- v2.4  PM type NORMAL, KGROUND, LTIME_LONG and THRU_TIER0 added (Pike R. Alpha, October 2016)
+#			- v2.5  PM type ratioratelimit, io_epp_boost, ring_mbd_ns and ring_ratio added (Pike R. Alpha, Januari 2017)
 #
 #
 # Known issues:
@@ -66,7 +68,7 @@
 #
 # Script version info.
 #
-gScriptVersion=2.3
+gScriptVersion=2.5
 
 #
 # Path and filename setup.
@@ -596,8 +598,29 @@ function _getPMValue()
                     matchingData=$(egrep -o '696f63735f72747269676765720{14}[0-9a-f]{8}' "$filename")
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
-     *        )
-                ;;
+
+    ratioratelimit) # 72 61 74 69 6F 72 61 74 65 6C 69 6D 69 74 00 00 00 00 00 00 C0 C6 2D 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    matchingData=$(egrep -o '726174696f726174656c696d69740{12}[0-9a-f]{8}' "$filename")
+                    _toLittleEndian "${matchingData:40:8}"
+                    ;;
+
+    io_epp_boost  ) # 69 6F 5F 65 70 70 5F 62 6F 6F 73 74 00 00 00 00 00 00 00 00 20 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    matchingData=$(egrep -o '696f5f6570705f626f6f73740{16}[0-9a-f]{2}' "$filename")
+                    _toLittleEndian "${matchingData:40:8}"
+                    ;;
+
+    ring_mbd_ns   ) # 72 69 6E 67 5F 6D 62 64 5F 6E 73 00 00 00 00 00 00 00 00 00 10 27 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    matchingData=$(egrep -o '72696e675f6d62645f6e730{18}[0-9a-f]{8}' "$filename")
+                    _toLittleEndian "${matchingData:40:8}"
+                    ;;
+
+    ring_ratio    ) # 72 69 6E 67 5F 72 61 74 69 6F 00 00 00 00 00 00 00 00 00 00 21 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+                    matchingData=$(egrep -o '72696e675f726174696f0{20}[0-9a-f]{2}' "$filename")
+                    _toLittleEndian "${matchingData:40:8}"
+                    ;;
+
+    *             )
+                    ;;
   esac
 }
 
@@ -674,9 +697,10 @@ function _convertXML2BIN()
     if [[ $? -eq 1 ]];
       then
         #
-        # Yes.
+        # Yes. Get frequencies.
         #
         local index=0
+        local frequencies=$(sudo /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:Frequencies" "${plist}" 2>&1)
         #
         # frequencies is now something like this:
         #
@@ -723,7 +747,7 @@ function _convertXML2BIN()
     #
     # Data types.
     #
-    local targetData=('BACKGROUND','REALTIME_SHORT','REALTIME_LONG','KERNEL','THRU_TIER1','THRU_TIER2','THRU_TIER3','THRU_TIER4','THRU_TIER5','GRAPHICS_SERVER','hard-rt-ns','ubpc','off','on','hwp','epp','perf-bias','utility-tlvl','non-focal-tlvl','iocs_engage','iocs_disengage','iocs_cstflr','iocs_rtrigger')
+    local targetData=('BACKGROUND','NORMAL','KGROUND','REALTIME_SHORT','REALTIME_LONG','KERNEL','LTIME_LONG','THRU_TIER0','THRU_TIER1','THRU_TIER2','THRU_TIER3','THRU_TIER4','THRU_TIER5','GRAPHICS_SERVER','hard-rt-ns','ubpc','off','on','hwp','epp','perf-bias','utility-tlvl','non-focal-tlvl','iocs_engage','iocs_disengage','iocs_cstflr','iocs_rtrigger','ratioratelimit','io_epp_boost','ring_mbd_ns','ring_ratio')
     #
     # Save default (0) delimiter.
     #
