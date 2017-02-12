@@ -3,13 +3,13 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 2.5 - Copyright (c) 2013-2017 by Pike R. Alpha
+# Version 2.6 - Copyright (c) 2013-2017 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
 #			-       Check for 'FrequencyVectors' in the Resource directory (Pike R. Alpha, December 2014)
-#			-       Touch /S*/L*/Extensions (Pike R. Alpha, Januari 2014)
-#			-       Ask if the user wants to reboot (Pike R. Alpha, Februari 2014)
+#			-       Touch /S*/L*/Extensions (Pike R. Alpha, January 2014)
+#			-       Ask if the user wants to reboot (Pike R. Alpha, February 2014)
 #			- v0.6	Bug report/feedback info/link added (Pike R. Alpha, April 2014)
 #			- v0.7	Cleanups/comments added (Pike R. Alpha, April 2014)
 #			-       Implement gCallOpen like ssdtPRGen.sh (Pike R. Alpha, April 2014)
@@ -33,13 +33,13 @@
 #			-       Copied _invalidArgumentError from ssdtPRGen.sh
 #			-       New function _getPMValue added to read PM data values.
 #			-       New function _toLittleEndian added to convert values for function _getPMValue.
-#			- v1.6  Now using Models.cfg from ssdtPRGen.sh (Pike R. Alpha, Januari 2016)
+#			- v1.6  Now using Models.cfg from ssdtPRGen.sh (Pike R. Alpha, January 2016)
 #			-       Function _getModelByPlist replaced by _getModelByBoardID
-#			- v1.7  Unused function _getModelByPlist removed (Pike R. Alpha, Februari 2016)
+#			- v1.7  Unused function _getModelByPlist removed (Pike R. Alpha, February 2016)
 #			-       Expand function _convertXML2BIN to show new/missing PM data.
-#			- v1.8  Use defaults read to select the editor (Pike R. Alpha, Februari 2016)
+#			- v1.8  Use defaults read to select the editor (Pike R. Alpha, February 2016)
 #			-       Cleanups done, typo fixed, style nit and bug fixes.
-#			- v1.9  Fix defaults read to select the editor (Pike R. Alpha, Februari 2016)
+#			- v1.9  Fix defaults read to select the editor (Pike R. Alpha, February 2016)
 #			-       Variable gFirstRun removed (no longer used).
 #			-       Calls to _showHeader and _selectEditor moved out of main.
 #			- v2.0  Dump HWP and EPP settings (Pike R. Alpha, April 2016)
@@ -49,7 +49,9 @@
 #			-       Add array for FrequencyVectors when it is missing.
 #			-       Quick and dirty fix for Xcode-beta.app added.
 #			- v2.4  PM type NORMAL, KGROUND, LTIME_LONG and THRU_TIER0 added (Pike R. Alpha, October 2016)
-#			- v2.5  PM type ratioratelimit, io_epp_boost, ring_mbd_ns and ring_ratio added (Pike R. Alpha, Januari 2017)
+#			- v2.5  PM type ratioratelimit, io_epp_boost, ring_mbd_ns and ring_ratio added (Pike R. Alpha, January 2017)
+#			- v2.6  Kaby Lake support added (Pike R. Alpha, February 2017)
+#			-       Fixed debug output/support for multiple FrequencyVectors added.
 #
 #
 # Known issues:
@@ -68,7 +70,7 @@
 #
 # Script version info.
 #
-gScriptVersion=2.5
+gScriptVersion=2.6
 
 #
 # Path and filename setup.
@@ -150,6 +152,14 @@ let gCallOpen=2
 # 
 #
 gTargetFileNames=""
+
+#
+#
+#
+gTargetData_1=('BACKGROUND','NORMAL','KGROUND','REALTIME_SHORT','REALTIME_LONG','KERNEL','LTIME_LONG','THRU_TIER0','THRU_TIER1','THRU_TIER2','THRU_TIER3','THRU_TIER4','THRU_TIER5','GRAPHICS_SERVER')
+gTargetData_2=('hard-rt-ns','ubpc','off','on','hwp','epp','perf-bias','utility-tlvl','non-focal-tlvl')
+gTargetData_3=('iocs_engage','iocs_disengage','iocs_cstflr','iocs_rtrigger')
+gTargetData_4=('ratioratelimit','io_epp_boost','ring_mbd_ns','ring_ratio')
 
 #
 # Output styling.
@@ -513,7 +523,7 @@ function _toLittleEndian()
 function _getPMValue()
 {
   local matchingData
-  local filename="/tmp/${boardID}.dat"
+  local filename="/tmp/${2}.dat"
 
   case "$1" in
     hard-rt-ns    ) # 68 61 72 64 2D 72 74 2D 6E 73 00 00 00 00 00 00 00 00 00 00 00 09 3D 00
@@ -648,6 +658,139 @@ function _checkPlistForEntry()
 #--------------------------------------------------------------------------------
 #
 
+function _dumpData()
+{
+  local boardID=$1
+  local targetList=$2
+
+  case "$targetList" in
+    1) local targetData=$gTargetData_1
+       printf "${STYLE_BOLD}Settings:${STYLE_RESET} "
+       ;;
+
+    2) local targetData=$gTargetData_2
+       ;;
+
+    3) local targetData=$gTargetData_3
+       ;;
+
+    4) local targetData=$gTargetData_4
+       ;;
+  esac
+
+  #
+  # Save default (0) delimiter.
+  #
+  local ifs=$IFS
+  #
+  # Change delimiter to a comma character.
+  #
+  IFS=","
+  #
+  # Split vars.
+  #
+  local data=($targetData)
+  #
+  # Restore the default (0) delimiter.
+  #
+  IFS=$ifs
+  #
+  #
+  #
+  local item=0
+  local matched=0
+  #
+  #
+  #
+  for target in "${data[@]}"
+    do
+      if [[ $(grep -c "${target}" "/tmp/${boardID}.bin") -gt 0 ]];
+        then
+          let matched+=1
+
+          if [[ $targetList -gt 1 && $item -eq 0 ]];
+            then
+              targetList=-1
+              printf "\t  "
+          fi
+
+          if [[ $item -gt 0 ]];
+            then
+              printf ", "
+          fi
+
+          printf "${target}"
+
+          let item+=1
+
+          if [[ $targetList -eq -1 ]];
+            then
+              local value=$(_getPMValue $target $boardID)
+              printf " (${value})"
+          fi
+      fi
+  done
+
+  if [[ $matched -gt 0 ]];
+    then
+      echo ''
+  fi
+}
+
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _exportFrequencyVectors()
+{
+  local index=$1
+  local plist=$2
+  local boardID=$3
+
+  if [ $index -gt -1 ];
+    then
+      boardID="${3}-${index}"
+  fi
+
+  if [ $index -eq -1 ];
+    then
+      index=0
+  fi
+  #
+  # Export the FrequencyVectors (with help of the Print command) to /tmp/[board-id].bin
+  #
+  sudo /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors:${index}" "${plist}" > "/tmp/${boardID}.bin"
+  #
+  # Remove the trailing 0x0A byte (we don't want that).
+  #
+  sudo perl -pi -e 'chomp if eof' "/tmp/${boardID}.bin"
+  #
+  # Convert binary FrequencyVectors to data format.
+  #
+  sudo xxd -c 256 -ps "/tmp/${boardID}.bin" | tr -d '\n' > "/tmp/${boardID}.dat"
+  #
+  # Get filesize.
+  #
+  local filesize=$(stat -f%z "/tmp/${boardID}.bin")
+  #
+  #
+  #
+  echo "Converted to: /tmp/${boardID}.bin ($filesize bytes)"
+  #
+  #
+  #
+  _dumpData $boardID 1
+  _dumpData $boardID 2
+  _dumpData $boardID 3
+  _dumpData $boardID 4
+}
+
+
+#
+#--------------------------------------------------------------------------------
+#
+
 function _convertXML2BIN()
 {
   local index=0
@@ -665,39 +808,22 @@ function _convertXML2BIN()
     #
     local boardID=${filename%.*}
     #
-    # Export the FrequencyVectors (with help of the Print command) to /tmp/[board-id].bin
-    #
-    sudo /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors:0" "${plist}" > "/tmp/${boardID}.bin"
-    #
-    # Now we remove the trailing 0x0A byte – which we don't need.
-    #
-    sudo perl -pi -e 'chomp if eof' "/tmp/${boardID}.bin"
-    #
-    # Convert binary FrequencyVectors to data format.
-    #
-    sudo xxd -c 256 -ps "/tmp/${boardID}.bin" | tr -d '\n' > "/tmp/${boardID}.dat"
-    #
-    # Get filesize.
-    #
-    local filesize=$(stat -f%z "/tmp/${boardID}.bin")
-    #
     # Get model identifier from board-id.
     #
     local model=$(_getModelByBoardID $boardID)
-    #
+
     echo ''
-    echo "Data from ${boardID}.plist ($model) converted to: /tmp/${boardID}.bin ($filesize bytes)"
-    #
-    #
-    #
+    printf "Examining data of: ${STYLE_BOLD}${boardID}${STYLE_RESET}.plist (${STYLE_BOLD}${model}${STYLE_RESET}) ...\n"
+    echo '-----------------------------------------------------------------'
+
     _checkPlistForEntry "IOPlatformPowerProfile:Frequencies" "${plist}"
     #
-    # Are there any Frequencies specified?
+    # Are there any Frequencies in the plist?
     #
     if [[ $? -eq 1 ]];
       then
         #
-        # Yes. Get frequencies.
+        # Yes. Get Frequencies.
         #
         local index=0
         local frequencies=$(sudo /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:Frequencies" "${plist}" 2>&1)
@@ -730,89 +856,28 @@ function _convertXML2BIN()
         # 0
         #
 
-       if [[ "${#frequencies[@]}" ]];
-         then
-           printf "${STYLE_BOLD}Frequencies:${STYLE_RESET} ${frequencies[0]} MHz (FrequencyVectors @ ${frequencies[1]})\n"
-           let index+=2
-       fi
+        while [ $index -lt "${#frequencies[@]}" ];
+          do
+            if [ $index -gt 1 ];
+              then
+                echo ''
+            fi
 
-       while [ $index -lt "${#frequencies[@]}" ];
-       do
-         printf "\t   - ${frequencies[${index}]} MHz "
-         let index++
-         printf "(FrequencyVectors @ ${frequencies[${index}]})\n"
-         let index++
-       done
+            printf "${STYLE_BOLD}Max Turbo Boost:${STYLE_RESET} ${frequencies[${index}]} MHz (FrequencyVectors @ ${frequencies[${index}+1]}) "
+            #
+            # Export the FrequencyVectors. Export all FrequencyVectors.
+            #
+            _exportFrequencyVectors ${frequencies[${index}+1]} $plist $boardID
+
+            let index+=2
+        done
+      else
+        #
+        # No Frequencies found. Export FrequencyVectors
+        #
+        _exportFrequencyVectors -1 $plist $boardID
     fi
-    #
-    # Data types.
-    #
-    local targetData=('BACKGROUND','NORMAL','KGROUND','REALTIME_SHORT','REALTIME_LONG','KERNEL','LTIME_LONG','THRU_TIER0','THRU_TIER1','THRU_TIER2','THRU_TIER3','THRU_TIER4','THRU_TIER5','GRAPHICS_SERVER','hard-rt-ns','ubpc','off','on','hwp','epp','perf-bias','utility-tlvl','non-focal-tlvl','iocs_engage','iocs_disengage','iocs_cstflr','iocs_rtrigger','ratioratelimit','io_epp_boost','ring_mbd_ns','ring_ratio')
-    #
-    # Save default (0) delimiter.
-    #
-    local ifs=$IFS
-    #
-    # Change delimiter to a comma character.
-    #
-    IFS=","
-    #
-    # Split vars.
-    #
-    local data=($targetData)
-    #
-    # Restore the default (0) delimiter.
-    #
-    IFS=$ifs
-    #
-    #
-    #
-    local item=0
-    local count=0
-    #
-    #
-    #
-    printf "${STYLE_BOLD}PM type(s): ${STYLE_RESET}"
-    #
-    #
-    #
-    for target in "${data[@]}"
-    do
-      let item+=1
-
-      if [[ $count -gt 0 && $item -eq 10 || $item -eq 17 ]];
-        then
-          printf "\n\t    "
-          let count=0
-      fi
-
-      if [[ $(grep -c "${target}" "/tmp/${boardID}.bin") -eq 1 ]];
-        then
-          if [[ $count -gt 0 ]];
-            then
-              printf ", "
-          fi
-
-          let count+=1
-
-          printf "${target}"
-
-          if [[ $item -ge 10 ]];
-            then
-              local value=$(_getPMValue $target)
-              printf " (${value})"
-          fi
-      fi
-    done
-    #
-    #
-    #
-    let index+=1
-
-    echo ''
   done
-
-  echo ''
 }
 
 #
@@ -887,7 +952,7 @@ function _getModelByBoardID()
   #
   # Model/board-id arrays from models.cfg
   #
-  local modelData=("gHaswellModelData[@]" "gBroadwellModelData[@]" "gSkylakeModelData[@]")
+  local modelData=("gHaswellModelData[@]" "gBroadwellModelData[@]" "gSkylakeModelData[@]" "gKabyLakeModelData[@]")
   #
   # Loop through the available model data.
   #
@@ -935,6 +1000,8 @@ function _showSupportedBoardIDsAndModels()
     Broadwell) local modelDataList="gBroadwellModelData[@]"
                ;;
       Skylake) local modelDataList="gSkylakeModelData[@]"
+               ;;
+     KabyLake) local modelDataList="gKabyLakeModelData[@]"
                ;;
   esac
   #
@@ -1028,6 +1095,7 @@ function _getScriptArguments()
           printf "          Haswell\n"
           printf "          Broadwell\n"
           printf "          Skylake\n"
+          printf "          KabyLake\n"
           #
           # Stop script (success).
           #
@@ -1039,6 +1107,7 @@ function _getScriptArguments()
           printf "\nSupported board-id / model combinations for:\n"
           echo -e "--------------------------------------------\n"
 
+          _showSupportedBoardIDsAndModels "KabyLake"
           _showSupportedBoardIDsAndModels "Skylake"
           _showSupportedBoardIDsAndModels "Broadwell"
           _showSupportedBoardIDsAndModels "Haswell"
@@ -1058,7 +1127,9 @@ function _getScriptArguments()
                        ;;
             BROADWELL) _showSupportedBoardIDsAndModels "Broadwell"
                        ;;
-            SKYLAKE)   _showSupportedBoardIDsAndModels "Skylake"
+            SKYLAKE  ) _showSupportedBoardIDsAndModels "Skylake"
+                       ;;
+            KABYLAKE ) _showSupportedBoardIDsAndModels "KabyLake"
                        ;;
           esac
           #
@@ -1196,7 +1267,7 @@ function main()
 #     sudo echo "}" >> /tmp/FrequencyVectors.bin
   fi
   #
-  # Now we remove the 'complimentary' 0x0A byte – something we don't want.
+  # Remove the trailing 0x0A byte (we don't want that).
   #
   perl -pi -e 'chomp if eof' /tmp/FrequencyVectors.bin
   #
