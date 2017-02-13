@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 2.6 - Copyright (c) 2013-2017 by Pike R. Alpha
+# Version 2.7 - Copyright (c) 2013-2017 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -52,6 +52,8 @@
 #			- v2.5  PM type ratioratelimit, io_epp_boost, ring_mbd_ns and ring_ratio added (Pike R. Alpha, January 2017)
 #			- v2.6  Kaby Lake support added (Pike R. Alpha, February 2017)
 #			-       Fixed debug output/support for multiple FrequencyVectors added.
+#			- v2.7  Debug output now also shows the LFM frequency (Pike R. Alpha, February 2017)
+#			-       Automatic LFM frequency patching added.
 #
 #
 # Known issues:
@@ -70,7 +72,7 @@
 #
 # Script version info.
 #
-gScriptVersion=2.6
+gScriptVersion=2.7
 
 #
 # Path and filename setup.
@@ -495,6 +497,7 @@ function _selectSourceResourceFile()
   echo ''
 }
 
+
 #
 #--------------------------------------------------------------------------------
 #
@@ -516,14 +519,73 @@ function _toLittleEndian()
   echo -n "$value"
 }
 
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _getLFMFrequency()
+{
+  local lfm=0
+  local boardID=$1
+  local matchingData=$(egrep -o '02000000[0-9a-f]{2}00000001000000' "/tmp/${boardID}.dat")
+
+  if [[ $matchingData ]];
+    then
+      let lfm="0x${matchingData:8:2}"
+      printf "Low Frequency Mode: ${lfm}00 MHz\n\t  "
+  fi
+}
+
+
+#
+#--------------------------------------------------------------------------------
+#
+
+
+function _patchLFM()
+{
+  local lfm=0
+  #
+  # Convert extracted binary FrequencyVectors to PostScript format.
+  #
+  sudo xxd -c 256 -ps "/tmp/FrequencyVectors.bin" | tr -d '\n' > "/tmp/FrequencyVectors.dat"
+  #
+  # Check for the LFM restriction.
+  #
+  local matchingData=$(egrep -o '02000000[0-9a-f]{2}00000001000000' "/tmp/FrequencyVectors.dat")
+  #
+  # Did we find the restriction?
+  #
+  if [[ $matchingData ]];
+    then
+      #
+      # Yes. Get human readable frequency.
+      #
+      let lfm="0x${matchingData:8:2}"
+      #
+      # Lower frequency to 800 MHz.
+      #
+      printf "Patching LFM from: ${lfm}00 MHz to 800 MHz\n"
+      #
+      sudo /usr/bin/perl -pi -e "s|^${matchingData}|${matchingData:0:8}08${matchingData:10:14}|" /tmp/FrequencyVectors.dat
+      #
+      # Convert patched PostScript data to binary format.
+      #
+      sudo xxd -r -p "/tmp/FrequencyVectors.dat" > "/tmp/FrequencyVectorsPatched.bin"
+  fi
+}
+
+
 #
 #--------------------------------------------------------------------------------
 #
 
 function _getPMValue()
 {
+  local boardID=$2
   local matchingData
-  local filename="/tmp/${2}.dat"
+  local filename="/tmp/${boardID}.dat"
 
   case "$1" in
     hard-rt-ns    ) # 68 61 72 64 2D 72 74 2D 6E 73 00 00 00 00 00 00 00 00 00 00 00 09 3D 00
@@ -666,6 +728,7 @@ function _dumpData()
   case "$targetList" in
     1) local targetData=$gTargetData_1
        printf "${STYLE_BOLD}Settings:${STYLE_RESET} "
+       _getLFMFrequency $boardID
        ;;
 
     2) local targetData=$gTargetData_2
@@ -1260,11 +1323,7 @@ function main()
       #
       # Export the FrequencyVectors (with help of the Print command) to /tmp/FrequencyVectors.bin
       #
-#     sudo echo "Array {" > /tmp/FrequencyVectors.bin
-#     /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors:0" "${gSourcePlist}" > /tmp/tmp.bin
-      /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors:0" "${gSourcePlist}" >/tmp/FrequencyVectors.bin
-#     cat /tmp/tmp.bin >> /tmp/FrequencyVectors.bin
-#     sudo echo "}" >> /tmp/FrequencyVectors.bin
+      /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors:0" "${gSourcePlist}" > /tmp/FrequencyVectors.bin
   fi
   #
   # Remove the trailing 0x0A byte (we don't want that).
@@ -1285,9 +1344,23 @@ function main()
       /usr/libexec/PlistBuddy -c "Add IOPlatformPowerProfile:FrequencyVectors array" "${gTargetPlist}"
   fi
   #
-  # Import FrequencyVectors into target plist (for example: Mac-F60DEB81FF30ACF6.plist).
   #
-  /usr/libexec/PlistBuddy -c "Import IOPlatformPowerProfile:FrequencyVectors:0 /tmp/FrequencyVectors.bin" "${gTargetPlist}"
+  #
+  _patchLFM
+
+  if [ -e "/tmp/FrequencyVectorsPatched.bin" ];
+    then
+      #
+      # Import Patched FrequencyVectors into target plist (for example: Mac-F60DEB81FF30ACF6.plist).
+      #
+      /usr/libexec/PlistBuddy -c "Import IOPlatformPowerProfile:FrequencyVectors:0 /tmp/FrequencyVectorsPatched.bin" "${gTargetPlist}"
+    else
+      #
+      # Import FrequencyVectors into target plist (for example: Mac-F60DEB81FF30ACF6.plist).
+      #
+      /usr/libexec/PlistBuddy -c "Import IOPlatformPowerProfile:FrequencyVectors:0 /tmp/FrequencyVectors.bin" "${gTargetPlist}"
+  fi
+
   #
   # Check for StepContextDict.
   #
