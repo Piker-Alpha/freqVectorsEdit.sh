@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 2.7 - Copyright (c) 2013-2017 by Pike R. Alpha
+# Version 2.8 - Copyright (c) 2013-2017 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -54,6 +54,7 @@
 #			-       Fixed debug output/support for multiple FrequencyVectors added.
 #			- v2.7  Debug output now also shows the LFM frequency (Pike R. Alpha, February 2017)
 #			-       Automatic LFM frequency patching added.
+#			- v2.8  Fix output styling (Pike R. Alpha, February 2017)
 #
 #
 # Known issues:
@@ -72,7 +73,7 @@
 #
 # Script version info.
 #
-gScriptVersion=2.7
+gScriptVersion=2.8
 
 #
 # Path and filename setup.
@@ -166,9 +167,29 @@ gTargetData_4=('ratioratelimit','io_epp_boost','ring_mbd_ns','ring_ratio')
 #
 # Output styling.
 #
-STYLE_RESET="\e[0m"
-STYLE_BOLD="\e[1m"
-STYLE_UNDERLINED="\e[4m"
+STYLE_RESET=$(tput sgr0)
+STYLE_BOLD=$(tput bold)
+STYLE_UNDERLINED=$(tput smul)
+#
+# Output Foreground Colours.
+#
+STYLE_RED_FG=$(tput setaf 1)
+STYLE_GREEN_FG=$(tput setaf 2)
+STYLE_YELLOW_FG=$(tput setaf 3)
+STYLE_BLUE_FG=$(tput setaf 4)
+STYLE_MAGENTA_FG=$(tput setaf 5)
+STYLE_CYAN_FG=$(tput setaf 6)
+STYLE_WHITE_FG=$(tput setaf 7)
+#
+# Output Background Colours.
+#
+STYLE_RED_BG=$(tput setab 1)
+STYLE_GREEN_BG=$(tput setab 2)
+STYLE_YELLOW_BG=$(tput setab 3)
+STYLE_BLUE_BG=$(tput setab 4)
+STYLE_MAGENTA_BG=$(tput setab 5)
+STYLE_CYAN_BG=$(tput setab 6)
+STYLE_WHITE_BG=$(tput setab 7)
 
 #
 #--------------------------------------------------------------------------------
@@ -197,6 +218,11 @@ function _PRINT_MSG()
           fi
 
           local message=":"$(echo $message | sed -e "s/^[\n]*${messageTypeStripped}://")
+      fi
+
+      if [[ $messageType == "Error" ]];
+        then
+          printf "${STYLE_RED_FG}"
       fi
 
       printf "${STYLE_BOLD}${messageType}${STYLE_RESET}$message\n"
@@ -275,7 +301,7 @@ function _showHeader()
 {
   printf "${STYLE_BOLD}freqVectorsEdit.sh${STYLE_RESET} v${gScriptVersion} Copyright (c) 2013-$(date "+%Y") by Pike R. Alpha.\n"
   echo '-----------------------------------------------------------------'
-  printf "${STYLE_BOLD}Bugs${STYLE_RESET} > https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues <\n\n"
+  printf "${STYLE_BOLD}Bugs${STYLE_RESET} > ${STYLE_BLUE_FG}https://github.com/Piker-Alpha/freqVectorsEdit.sh/issues${STYLE_RESET} <\n\n"
 }
 
 #
@@ -442,7 +468,12 @@ function _selectSourceResourceFile()
     #
     # Show item.
     #
-    printf " [ %2d ] $file ($model)" $index
+    if [[ $model == "" ]];
+      then
+        printf " [ ${STYLE_RED_FG}%2d${STYLE_RESET} ] $file (${STYLE_RED_FG}Unknown${STYLE_RESET})" $index
+      else
+        printf " [ %2d ] $file ($model)" $index
+    fi
     echo ''
   done
   #
@@ -528,9 +559,11 @@ function _getLFMFrequency()
 {
   local lfm=0
   local boardID=$1
-  local matchingData=$(egrep -o '02000000[0-9a-f]{2}00000001000000' "/tmp/${boardID}.dat")
+# local matchingData=$(egrep -o '02000000[0-9a-f]{2}00000001000000' "/tmp/${boardID}.dat")
+  local matchingData=$(xxd -ps -l 16 "/tmp/${boardID}.bin")
 
-  if [[ $matchingData ]];
+# if [[ $matchingData ]];
+  if [[ ${matchingData:0:8} == "02000000" && ${matchingData:16:8} == "01000000" ]];
     then
       let lfm="0x${matchingData:8:2}"
       printf "Low Frequency Mode: ${lfm}00 MHz\n\t  "
