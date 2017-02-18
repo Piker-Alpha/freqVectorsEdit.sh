@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 2.8 - Copyright (c) 2013-2017 by Pike R. Alpha
+# Version 2.9 - Copyright (c) 2013-2017 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -55,6 +55,7 @@
 #			- v2.7  Debug output now also shows the LFM frequency (Pike R. Alpha, February 2017)
 #			-       Automatic LFM frequency patching added.
 #			- v2.8  Fix output styling (Pike R. Alpha, February 2017)
+#			- v2.9  Add lost epp_override (Pike R. Alpha, February 2017)
 #
 #
 # Known issues:
@@ -73,7 +74,7 @@
 #
 # Script version info.
 #
-gScriptVersion=2.8
+gScriptVersion=2.9
 
 #
 # Path and filename setup.
@@ -162,7 +163,7 @@ gTargetFileNames=""
 gTargetData_1=('BACKGROUND','NORMAL','KGROUND','REALTIME_SHORT','REALTIME_LONG','KERNEL','LTIME_LONG','THRU_TIER0','THRU_TIER1','THRU_TIER2','THRU_TIER3','THRU_TIER4','THRU_TIER5','GRAPHICS_SERVER')
 gTargetData_2=('hard-rt-ns','ubpc','off','on','hwp','epp','perf-bias','utility-tlvl','non-focal-tlvl')
 gTargetData_3=('iocs_engage','iocs_disengage','iocs_cstflr','iocs_rtrigger')
-gTargetData_4=('ratioratelimit','io_epp_boost','ring_mbd_ns','ring_ratio')
+gTargetData_4=('ring_mbd_ns','ring_ratio','ratioratelimit','epp_override','io_epp_boost')
 
 #
 # Output styling.
@@ -661,6 +662,12 @@ function _getPMValue()
                     #
                     # 65 70 70 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 92 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
                     matchingData=$(egrep -o '6570700{34}[0-9a-f]{8}' "$filename")
+                    _toLittleEndian "${matchingData:40:8}"
+                    ;;
+
+    epp_override  ) #
+                    # 65 70 70 5F 6F 76 65 72 72 69 64 65 00 00 00 00 00 00 00 00 78 00 00 00
+                    matchingData=$(egrep -o '6570705f6f766572726964650{16}[0-9a-f]{8}' "$filename")
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
