@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 2.9 - Copyright (c) 2013-2017 by Pike R. Alpha
+# Version 3.1 - Copyright (c) 2013-2017 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -56,6 +56,16 @@
 #			-       Automatic LFM frequency patching added.
 #			- v2.8  Fix output styling (Pike R. Alpha, February 2017)
 #			- v2.9  Add lost epp_override (Pike R. Alpha, February 2017)
+#			- v3.0  Use frequency instead of index in filename (Pike R. Alpha, February 2017)
+#			-       Function _getLFMFrequency now reads the binary file.
+#			-       Function _patchLFM now relies on binary file instead of .dat file.
+#			-       Function _getLowestFrequency (minimum ratio) added.
+#			-       Function _getHighestFrequency (maximum ratio) added.
+#			- v3.1  Show 'Unknown Model' in red (Pike R. Alpha, March 2017)
+#			-       Function _getHWP added.
+#			-       Function _getFrequencies added.
+#			-       Show matching board-id in bold.
+#			-       Show Frequencies and HWP setting.
 #
 #
 # Known issues:
@@ -74,7 +84,7 @@
 #
 # Script version info.
 #
-gScriptVersion=2.9
+gScriptVersion=3.1
 
 #
 # Path and filename setup.
@@ -158,9 +168,12 @@ let gCallOpen=2
 gTargetFileNames=""
 
 #
-#
+# Settings block at 0x1680-0x1baf
 #
 gTargetData_1=('BACKGROUND','NORMAL','KGROUND','REALTIME_SHORT','REALTIME_LONG','KERNEL','LTIME_LONG','THRU_TIER0','THRU_TIER1','THRU_TIER2','THRU_TIER3','THRU_TIER4','THRU_TIER5','GRAPHICS_SERVER')
+#
+# Settings block at 0x1bb0-0x1df3
+#
 gTargetData_2=('hard-rt-ns','ubpc','off','on','hwp','epp','perf-bias','utility-tlvl','non-focal-tlvl')
 gTargetData_3=('iocs_engage','iocs_disengage','iocs_cstflr','iocs_rtrigger')
 gTargetData_4=('ring_mbd_ns','ring_ratio','ratioratelimit','epp_override','io_epp_boost')
@@ -424,6 +437,160 @@ function _getBoardID()
 #--------------------------------------------------------------------------------
 #
 
+function _getLowestFrequency()
+{
+  #
+  # Get minimum ratio from: machdep.xcpm.hard_plimit_min_100mhz_ratio
+  #
+  gLowestFrequency=$(sysctl -nx machdep.xcpm.hard_plimit_min_100mhz_ratio)
+}
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _getHighestFrequency()
+{
+  #
+  # Get maximum ratio from: machdep.xcpm.hard_plimit_max_100mhz_ratio
+  #
+  let gHighestFrequency=($(sysctl -n machdep.xcpm.hard_plimit_max_100mhz_ratio) * 100)
+}
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _getHWP()
+{
+  local filename=$1
+  local value=0;
+
+  if [[ $(grep -c "hwp" "${filename}") -gt 0 ]];
+    then
+      #
+      # Get settings data from binary file.
+      #
+      gFreqVectorData=$(xxd -s 7088 -l 580 -c 256 -ps "${filename}")
+      #
+      # Get HWP enable value (should be 1).
+      #
+      let value=$(_getPMValue "hwp")
+      #
+      # HWP enabled?
+      #
+      if [[ $value -eq 1 ]];
+        then
+          #
+          # HWP will be enabled. Return one.
+          #
+          return 1
+      fi
+  fi
+  #
+  # HWP will not be enabled. Return zero.
+  #
+  return 0
+}
+
+#
+#--------------------------------------------------------------------------------
+#
+
+function _getFrequencies()
+{
+  local index=0
+  local boardID=$1
+  local filenames=($(ls /tmp/"${boardID}"*.bin))
+  local itemCount="${#filenames[@]}"
+
+  for filename in "${filenames[@]}"
+  do
+    let index++
+    #
+    # Chop file extension from filename.
+    #
+    local basename=${filename%.*}
+    #
+    # Chop path and Mac- from filename.
+    #
+    local basename=${basename##*Mac-}
+    #
+    # Check for minus character in basename.
+    #
+    if [[ $basename =~ "-" ]];
+      then
+        #
+        # Show @ sign for first item (if frequencies are found).
+        #
+        if [[ $index -eq 1 && $itemCount -gt 0 ]];
+          then
+            printf " @ "
+        fi
+      else
+        #
+        # Not there. Add it.
+        #
+        basename=$basename+"-"
+    fi
+    #
+    # Get frequency (by chopping off everything before the minus sign).
+    #
+    local frequency=${basename##*-}
+    #
+    # Do we have a match with the turbo frequency?
+    #
+    if [[ $frequency == $gHighestFrequency ]];
+      then
+        #
+        # Yes. Show frequency with a green forground colour.
+        #
+        printf "${STYLE_GREEN_FG}${frequency}${STYLE_RESET}"
+      else
+        #
+        # No. Show frequency in the default forground colour.
+        #
+        printf "${frequency}"
+    fi
+    #
+    # Check for the HWP enable setting.
+    #
+    _getHWP $filename
+
+    if [[ $? -eq 1 ]];
+      then
+        #
+        # Last item?
+        #
+        if [[ $index -le $itemCount ]];
+          then
+            #
+            # No. Print separator.
+            #
+            printf ' '
+        fi
+
+        printf "HWP"
+    fi
+    #
+    # Last item?
+    #
+    if [[ $index -lt $itemCount ]];
+      then
+        #
+        # No. Print delimiter.
+        #
+        printf '/'
+    fi
+  done
+
+  printf ")"
+}
+
+#
+#--------------------------------------------------------------------------------
+#
+
 function _getResourceFiles()
 {
   cd "${gResourcePath}"
@@ -457,7 +624,7 @@ function _selectSourceResourceFile()
     #
     # Strip path from filename.
     #
-    local file=$(echo "$filename" | sed 's/\.\///')
+    local file=${filename##*/}
     #
     # Get board-id (by chopping off the file extension).
     #
@@ -467,15 +634,27 @@ function _selectSourceResourceFile()
     #
     local model=$(_getModelByBoardID $boardID)
     #
+    #
+    #
+    if [[ $gBoardID == $boardID ]];
+      then
+        printf "${STYLE_BOLD}"
+    fi
+    #
     # Show item.
     #
     if [[ $model == "" ]];
       then
-        printf " [ ${STYLE_RED_FG}%2d${STYLE_RESET} ] $file (${STYLE_RED_FG}Unknown${STYLE_RESET})" $index
+        printf " [ ${STYLE_RED_FG}%2d${STYLE_RESET} ] $file (${STYLE_RED_FG}Unknown Model${STYLE_RESET}" $index
       else
-        printf " [ %2d ] $file ($model)" $index
+        printf " [ %2d ] $file ($model" $index
     fi
-    echo ''
+    #
+    #
+    #
+    _getFrequencies $boardID
+
+    echo "${STYLE_RESET}"
   done
   #
   #
@@ -560,10 +739,8 @@ function _getLFMFrequency()
 {
   local lfm=0
   local boardID=$1
-# local matchingData=$(egrep -o '02000000[0-9a-f]{2}00000001000000' "/tmp/${boardID}.dat")
   local matchingData=$(xxd -ps -l 16 "/tmp/${boardID}.bin")
 
-# if [[ $matchingData ]];
   if [[ ${matchingData:0:8} == "02000000" && ${matchingData:16:8} == "01000000" ]];
     then
       let lfm="0x${matchingData:8:2}"
@@ -579,34 +756,39 @@ function _getLFMFrequency()
 
 function _patchLFM()
 {
-  local lfm=0
-  #
-  # Convert extracted binary FrequencyVectors to PostScript format.
-  #
-  sudo xxd -c 256 -ps "/tmp/FrequencyVectors.bin" | tr -d '\n' > "/tmp/FrequencyVectors.dat"
+  local currentLFM=0
+  local humanLFM=0
+  local updatedLFM=0
+  local matchingData=$(xxd -ps -l 16 "/tmp/FrequencyVectors.bin")
   #
   # Check for the LFM restriction.
   #
-  local matchingData=$(egrep -o '02000000[0-9a-f]{2}00000001000000' "/tmp/FrequencyVectors.dat")
-  #
-  # Did we find the restriction?
-  #
-  if [[ $matchingData ]];
+  if [[ ${matchingData:0:8} == "02000000" && ${matchingData:16:8} == "01000000" ]];
     then
       #
-      # Yes. Get human readable frequency.
+      # Get LFM frequency from plist.
       #
-      let lfm="0x${matchingData:8:2}"
+      let currentLFM=0x"${matchingData:8:2}"
       #
-      # Lower frequency to 800 MHz.
+      # Lower frequency to what machdep.xcpm.hard_plimit_min_100mhz_ratio is.
       #
-      printf "Patching LFM from: ${lfm}00 MHz to 800 MHz\n"
+      updatedLFM="${gLowestFrequency:8:2}"
+      let humanLFM=0x"${updatedLFM}"
+      printf "Patching LFM from: ${currentLFM}00 MHz to ${humanLFM}00 MHz\n"
       #
-      sudo /usr/bin/perl -pi -e "s|^${matchingData}|${matchingData:0:8}08${matchingData:10:14}|" /tmp/FrequencyVectors.dat
+      # Setup search pattern.
       #
-      # Convert patched PostScript data to binary format.
+      local searchPattern=$(xxd -l 16 -g 1 "/tmp/FrequencyVectors.bin" | sed -e 's/^.*://' -e 's/  .*//' -e 's/ /\\x/g')
+#     echo "SearchPattern.: >${searchPattern}<"
       #
-      sudo xxd -r -p "/tmp/FrequencyVectors.dat" > "/tmp/FrequencyVectorsPatched.bin"
+      # Setup replace pattern.
+      #
+      local replacePattern="\x02\x00\x00\x00\x${updatedLFM}\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00"
+#     echo "ReplacePattern: >${replacePattern}<"
+      #
+      # Patch binary.
+      #
+      /usr/bin/perl -pi -e "s|${searchPattern}|${replacePattern}|" /tmp/FrequencyVectors.bin
   fi
 }
 
@@ -617,28 +799,27 @@ function _patchLFM()
 
 function _getPMValue()
 {
-  local boardID=$2
+  local setting=$1
   local matchingData
-  local filename="/tmp/${boardID}.dat"
 
-  case "$1" in
+  case "$setting" in
     hard-rt-ns    ) # 68 61 72 64 2D 72 74 2D 6E 73 00 00 00 00 00 00 00 00 00 00 00 09 3D 00
-                    matchingData=$(egrep -o '686172642d72742d6e730{20}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '686172642d72742d6e730{20}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     ubpc          ) # 75 62 70 63 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00
-                    matchingData=$(egrep -o '756270630{24}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '756270630{24}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:32:8}"
                     ;;
 
     off           ) # 6F 66 66 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '6F66660{18}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '6F66660{18}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:24:8}"
                     ;;
 
     on            ) # 6F 6E 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '6F6E{28}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '6F6E{28}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:24:8}"
                     ;;
 
@@ -646,7 +827,7 @@ function _getPMValue()
                     # HardWare-controlled Performance states.
                     #
                     # 68 77 70 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00
-                    matchingData=$(egrep -o '6877700{26}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '6877700{26}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:32:8}"
                     ;;
 
@@ -661,19 +842,19 @@ function _getPMValue()
                     #       determine the energy efficiency / performance preference.
                     #
                     # 65 70 70 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 92 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '6570700{34}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '6570700{34}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     epp_override  ) #
                     # 65 70 70 5F 6F 76 65 72 72 69 64 65 00 00 00 00 00 00 00 00 78 00 00 00
-                    matchingData=$(egrep -o '6570705f6f766572726964650{16}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '6570705f6f766572726964650{16}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     perf-bias     ) # 70 65 72 66 2D 62 69 61 73 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00
                     # 70 65 72 66 2D 62 69 61 73 00 00 00 00 00 00 00 00 00 00 00 05 00 00 00
-                    matchingData=$(egrep -o '706572662d626961730{22}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '706572662d626961730{22}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
@@ -682,52 +863,52 @@ function _getPMValue()
                     # 75 74 69 6C 69 74 79 2D 74 6C 76 6C 00 00 00 00 00 00 00 00 3e 00 00 00
                     # 75 74 69 6C 69 74 79 2D 74 6C 76 6C 00 00 00 00 00 00 00 00 4e 00 00 00
                     # 75 74 69 6C 69 74 79 2D 74 6C 76 6C 00 00 00 00 00 00 00 00 4f 00 00 00
-                    matchingData=$(egrep -o '7574696c6974792d746c766c0{16}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '7574696c6974792d746c766c0{16}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     non-focal-tlvl) # 6E 6F 6E 2D 66 6F 63 61 6C 2D 74 6C 76 6C 00 00 00 00 00 00 FA 00 00 00
-                    matchingData=$(egrep -o '6e6f6e2d666f63616c2d746c766c0{12}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '6e6f6e2d666f63616c2d746c766c0{12}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     iocs_engage   ) # 69 6F 63 73 5F 65 6E 67 61 67 65 00 00 00 00 00 00 00 00 00 00 6A 18 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '696f63735f656e676167650{18}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '696f63735f656e676167650{18}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     iocs_disengage) # 69 6F 63 73 5F 64 69 73 65 6E 67 61 67 65 00 00 00 00 00 00 A0 25 26 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '696f63735f646973656e676167650{12}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '696f63735f646973656e676167650{12}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     iocs_cstflr   ) # 69 6F 63 73 5F 63 73 74 66 6C 72 00 00 00 00 00 00 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '696f63735f637374666c720{18}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '696f63735f637374666c720{18}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     iocs_rtrigger ) # 69 6F 63 73 5F 72 74 72 69 67 67 65 72 00 00 00 00 00 00 00 64 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '696f63735f72747269676765720{14}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '696f63735f72747269676765720{14}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     ratioratelimit) # 72 61 74 69 6F 72 61 74 65 6C 69 6D 69 74 00 00 00 00 00 00 C0 C6 2D 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '726174696f726174656c696d69740{12}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '726174696f726174656c696d69740{12}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     io_epp_boost  ) # 69 6F 5F 65 70 70 5F 62 6F 6F 73 74 00 00 00 00 00 00 00 00 20 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '696f5f6570705f626f6f73740{16}[0-9a-f]{2}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '696f5f6570705f626f6f73740{16}[0-9a-f]{2}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     ring_mbd_ns   ) # 72 69 6E 67 5F 6D 62 64 5F 6E 73 00 00 00 00 00 00 00 00 00 10 27 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '72696e675f6d62645f6e730{18}[0-9a-f]{8}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '72696e675f6d62645f6e730{18}[0-9a-f]{8}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
     ring_ratio    ) # 72 69 6E 67 5F 72 61 74 69 6F 00 00 00 00 00 00 00 00 00 00 21 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-                    matchingData=$(egrep -o '72696e675f726174696f0{20}[0-9a-f]{2}' "$filename")
+                    matchingData=$(echo $gFreqVectorData | egrep -o '72696e675f726174696f0{20}[0-9a-f]{2}')
                     _toLittleEndian "${matchingData:40:8}"
                     ;;
 
@@ -767,7 +948,7 @@ function _dumpData()
 
   case "$targetList" in
     1) local targetData=$gTargetData_1
-       printf "${STYLE_BOLD}Settings:${STYLE_RESET} "
+       printf "\n${STYLE_BOLD}Settings:${STYLE_RESET} "
        _getLFMFrequency $boardID
        ;;
 
@@ -828,7 +1009,7 @@ function _dumpData()
 
           if [[ $targetList -eq -1 ]];
             then
-              local value=$(_getPMValue $target $boardID)
+              local value=$(_getPMValue $target)
               printf " (${value})"
           fi
       fi
@@ -850,28 +1031,26 @@ function _exportFrequencyVectors()
   local index=$1
   local plist=$2
   local boardID=$3
+  local frequency=$4
 
   if [ $index -gt -1 ];
     then
-      boardID="${3}-${index}"
+      boardID="${3}-${frequency}"
   fi
 
   if [ $index -eq -1 ];
     then
       index=0
   fi
+
   #
   # Export the FrequencyVectors (with help of the Print command) to /tmp/[board-id].bin
   #
-  sudo /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors:${index}" "${plist}" > "/tmp/${boardID}.bin"
+  /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:FrequencyVectors:${index}" "${plist}" > "/tmp/${boardID}.bin"
   #
   # Remove the trailing 0x0A byte (we don't want that).
   #
-  sudo perl -pi -e 'chomp if eof' "/tmp/${boardID}.bin"
-  #
-  # Convert binary FrequencyVectors to data format.
-  #
-  sudo xxd -c 256 -ps "/tmp/${boardID}.bin" | tr -d '\n' > "/tmp/${boardID}.dat"
+  perl -pi -e 'chomp if eof' "/tmp/${boardID}.bin"
   #
   # Get filesize.
   #
@@ -879,14 +1058,28 @@ function _exportFrequencyVectors()
   #
   #
   #
-  echo "Converted to: /tmp/${boardID}.bin ($filesize bytes)"
-  #
-  #
-  #
-  _dumpData $boardID 1
-  _dumpData $boardID 2
-  _dumpData $boardID 3
-  _dumpData $boardID 4
+  if [[ $gDebug -eq 1 ]];
+    then
+      printf "Converted to: /tmp/${boardID}.bin ($filesize bytes)"
+      #
+      #
+      #
+      gFreqVectorData=$(xxd -s 5760 -l 1328 -c 256 -ps "/tmp/${boardID}.bin" | tr -d '\n')
+      #
+      #
+      #
+      _dumpData $boardID 1
+      #
+      #
+      #
+      gFreqVectorData=$(xxd -s 7088 -l 580 -c 256 -ps "/tmp/${boardID}.bin" | tr -d '\n')
+      #
+      #
+      #
+      _dumpData $boardID 2
+      _dumpData $boardID 3
+      _dumpData $boardID 4
+  fi
 }
 
 
@@ -898,7 +1091,7 @@ function _convertXML2BIN()
 {
   local index=0
 
-  printf "\nConverting XML data to binary files ...\n"
+  _DEBUG_PRINT "\nConverting XML data to binary files ..."
 
   for plist in "${gTargetFileNames[@]}"
   do
@@ -915,9 +1108,21 @@ function _convertXML2BIN()
     #
     local model=$(_getModelByBoardID $boardID)
 
-    echo ''
-    printf "Examining data of: ${STYLE_BOLD}${boardID}${STYLE_RESET}.plist (${STYLE_BOLD}${model}${STYLE_RESET}) ...\n"
-    echo '-----------------------------------------------------------------'
+    if [[ $gDebug -eq 1 ]];
+      then
+        echo ''
+        printf "Examining data of: ${STYLE_BOLD}${boardID}${STYLE_RESET}.plist (${STYLE_BOLD}"
+
+        if [[ $model == "" ]];
+          then
+            printf "${STYLE_RED_FG}Unknown Model"
+          else
+            printf "${model}"
+        fi
+
+        echo "${STYLE_RESET}) ..."
+        echo '-----------------------------------------------------------------'
+    fi
 
     _checkPlistForEntry "IOPlatformPowerProfile:Frequencies" "${plist}"
     #
@@ -929,7 +1134,7 @@ function _convertXML2BIN()
         # Yes. Get Frequencies.
         #
         local index=0
-        local frequencies=$(sudo /usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:Frequencies" "${plist}" 2>&1)
+        local frequencies=$(/usr/libexec/PlistBuddy -c "Print IOPlatformPowerProfile:Frequencies" "${plist}" 2>&1)
         #
         # frequencies is now something like this:
         #
@@ -963,14 +1168,24 @@ function _convertXML2BIN()
           do
             if [ $index -gt 1 ];
               then
-                echo ''
+                _DEBUG_PRINT ''
             fi
 
-            printf "${STYLE_BOLD}Max Turbo Boost:${STYLE_RESET} ${frequencies[${index}]} MHz (FrequencyVectors @ ${frequencies[${index}+1]}) "
+            if [[ $gDebug -eq 1 ]];
+              then
+                if [[ "${frequencies[${index}]}" == "${gHighestFrequency}" ]];
+                  then
+                    printf "${STYLE_BOLD}Max Turbo Boost:${STYLE_BLUE_FG}"
+                  else
+                     printf "${STYLE_BOLD}Max Turbo Boost:${STYLE_RED_FG}"
+                fi
+
+                printf " ${frequencies[${index}]} MHZ${STYLE_RESET} (FrequencyVectors @ ${frequencies[${index}+1]}) "
+            fi
             #
             # Export the FrequencyVectors. Export all FrequencyVectors.
             #
-            _exportFrequencyVectors ${frequencies[${index}+1]} $plist $boardID
+            _exportFrequencyVectors ${frequencies[${index+1}]} $plist $boardID ${frequencies[${index}]}
 
             let index+=2
         done
@@ -995,8 +1210,8 @@ function _findPlistBuddy()
   if [ ! -f /usr/libexec/PlistBuddy ];
     then
       echo 'PlistBuddy not found ... Downloading PlistBuddy ...'
-      sudo curl https://raw.github.com/Piker-Alpha/freqVectorsEdit.sh/master/Tools/PlistBuddy -o /usr/libexec/PlistBuddy --create-dirs
-      sudo chmod +x /usr/libexec/PlistBuddy
+      curl https://raw.github.com/Piker-Alpha/freqVectorsEdit.sh/master/Tools/PlistBuddy -o /usr/libexec/PlistBuddy --create-dirs
+      chmod +x /usr/libexec/PlistBuddy
       printf 'Done.'
   fi
 }
@@ -1325,13 +1540,12 @@ function main()
   #
   _findPlistBuddy
   _getResourceFiles
+  _getLowestFrequency
+  _getHighestFrequency
   #
-  # Check if -d argument was used.
+  # Convert FrequencyVectors base64 data to bin files.
   #
-  if [[ $gDebug -eq 1 ]];
-    then
-      _convertXML2BIN
-  fi
+  _convertXML2BIN
   #
   # Check if -b argument was used.
   #
