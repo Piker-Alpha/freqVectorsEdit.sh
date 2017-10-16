@@ -3,7 +3,7 @@
 #
 # Script (freqVectorsEdit.sh) to add 'FrequencyVectors' from a source plist to Mac-F60DEB81FF30ACF6.plist
 #
-# Version 3.1 - Copyright (c) 2013-2017 by Pike R. Alpha
+# Version 3.2 - Copyright (c) 2013-2017 by Pike R. Alpha
 #
 # Updates:
 #			- v0.5	Show Mac model info (Pike R. Alpha, December 2013)
@@ -66,6 +66,7 @@
 #			-       Function _getFrequencies added.
 #			-       Show matching board-id in bold.
 #			-       Show Frequencies and HWP setting.
+#			- v3.2  Renamed _listmatchingFiles to _selectSourceResourceFile()
 #
 #
 # Known issues:
@@ -84,7 +85,7 @@
 #
 # Script version info.
 #
-gScriptVersion=3.1
+gScriptVersion=3.2
 
 #
 # Path and filename setup.
@@ -109,7 +110,7 @@ gVi="/usr/bin/vi"
 gEditor="$gNano"
 
 #
-# Initialised in function _listmatchingFiles()
+# Initialised in function _selectSourceResourceFile()
 #
 gSourcePlist=""
 
@@ -684,7 +685,7 @@ function _selectSourceResourceFile()
                      then
                        clear
                        _showHeader
-                       _listmatchingFiles
+                       _selectSourceResourceFile
                      else
                      #
                      # Lower selection (arrays start at zero).
